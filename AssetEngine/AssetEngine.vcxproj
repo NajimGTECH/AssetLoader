@@ -79,7 +79,7 @@
     <ClInclude Include="src\ByteAccess\LittleEndian.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Serializer.cpp" />
+    <ClCompile Include="SerializationTests.cpp" />
     <ClCompile Include="src\ByteAccess\ByteReader.cpp" />
     <ClCompile Include="src\ByteAccess\ByteWriter.cpp" />
   </ItemGroup>
