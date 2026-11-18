@@ -6,6 +6,7 @@
 
 #include "ByteAccess/ByteReader.h"
 #include "FileIO.h"
+#include "Integrity/Crc32.h"
 
 namespace asset
 {
@@ -20,6 +21,94 @@ namespace asset
 		[[nodiscard]] constexpr bool IsRangeInside(std::uint64_t offset, std::uint64_t size, std::uint64_t bufferSize) noexcept
 		{
 			return offset <= bufferSize && size <= bufferSize - offset;
+		}
+
+		/**
+		 * @brief True if [aOffset, aOffset + aSize) and [bOffset, bOffset + bSize) share at least one byte.
+		 *
+		 * Empty ranges never overlap anything. Both ranges must already be inside the archive, so
+		 * the additions cannot overflow.
+		 */
+		[[nodiscard]] constexpr bool RangesOverlap(std::uint64_t aOffset, std::uint64_t aSize,
+			std::uint64_t bOffset, std::uint64_t bSize) noexcept
+		{
+			return aSize != 0 && bSize != 0 && aOffset < bOffset + bSize && bOffset < aOffset + aSize;
+		}
+
+		/**
+		 * @brief Checks one directory entry against the archive and the entries before it.
+		 *
+		 * `previous` holds the entries already validated, in directory order.
+		 */
+		[[nodiscard]] ArchiveResult ValidateEntry(const AssetEntry& entry, const std::vector<AssetEntry>& previous,
+			std::uint64_t directoryOffset, std::uint64_t directorySize, std::uint64_t archiveSize) noexcept
+		{
+			if (entry.id == kInvalidAssetId)
+			{
+				return ArchiveError::InvalidAssetId;
+			}
+			if (!IsValidAssetType(entry.type))
+			{
+				return ArchiveError::InvalidAssetType;
+			}
+
+			// Strictly increasing IDs: sorted (binary search works) and no duplicates.
+			if (!previous.empty() && entry.id <= previous.back().id)
+			{
+				return ArchiveError::InvalidDirectory;
+			}
+
+			if (!IsRangeInside(entry.offset, entry.size, archiveSize))
+			{
+				return ArchiveError::AssetOutOfBounds;
+			}
+
+			// Asset data must not be read from the header or the directory.
+			if (RangesOverlap(entry.offset, entry.size, 0, kHeaderSize)
+				|| RangesOverlap(entry.offset, entry.size, directoryOffset, directorySize))
+			{
+				return ArchiveError::OverlappingData;
+			}
+
+			return ArchiveError::None;
+		}
+
+		/**
+		 * @brief True if the data of two assets share at least one byte.
+		 *
+		 * Sorts the non-empty ranges by offset, then compares each one with the next: O(n log n).
+		 * Empty assets are ignored (the writer may place them at the same offset as the next asset).
+		 */
+		[[nodiscard]] bool HasOverlappingData(const std::vector<AssetEntry>& entries)
+		{
+			struct Range
+			{
+				std::uint64_t offset;
+				std::uint64_t size;
+			};
+
+			std::vector<Range> ranges;
+			ranges.reserve(entries.size());
+			for (const AssetEntry& entry : entries)
+			{
+				if (entry.size != 0)
+				{
+					ranges.push_back(Range{ entry.offset, entry.size });
+				}
+			}
+
+			std::sort(ranges.begin(), ranges.end(),
+				[](const Range& a, const Range& b) { return a.offset < b.offset; });
+
+			for (std::size_t i = 1; i < ranges.size(); ++i)
+			{
+				// Sorted by offset: they overlap if the next one starts before the previous one ends.
+				if (ranges[i].offset < ranges[i - 1].offset + ranges[i - 1].size)
+				{
+					return true;
+				}
+			}
+			return false;
 		}
 	}
 
@@ -57,54 +146,85 @@ namespace asset
 		ArchiveHeader& header, std::vector<AssetEntry>& entries)
 	{
 		ByteReader reader(archive);
+		const std::uint64_t actualSize = archive.size();
 
+		// 1. Header: magic, version, checksum (ReadHeader), then field values.
 		ArchiveHeader decodedHeader;
 		if (const ArchiveResult result = ReadHeader(reader, decodedHeader); !result)
 		{
 			return result;
 		}
+		if (decodedHeader.flags != 0)
+		{
+			return ArchiveError::InvalidHeader;
+		}
 
-		// The directory must start after the header and fit entirely in the data.
-		const std::uint64_t archiveSize = archive.size();
+		// 2. Size: detects truncated files (and extra bytes) before anything else is read.
+		//    The header checksum passed, so the stored size itself is trustworthy.
+		if (actualSize < decodedHeader.archiveSize)
+		{
+			return ArchiveError::TruncatedArchive;
+		}
+		if (actualSize > decodedHeader.archiveSize)
+		{
+			return ArchiveError::ArchiveSizeMismatch;
+		}
+
+		// 3. Directory: after the header, inside the data, checksum OK.
+		//    These checks stay even though the size matched: a header with a valid checksum can
+		//    still contain wrong offsets (bug in another writer, hand-made file...).
+		const std::uint64_t directoryOffset = decodedHeader.directoryOffset;
 		const std::uint64_t directorySize = std::uint64_t{ decodedHeader.assetCount } * kEntrySize; // < 2^37, no overflow
-		if (decodedHeader.directoryOffset < kHeaderSize)
+		if (directoryOffset < kHeaderSize)
 		{
 			return ArchiveError::InvalidDirectory;
 		}
-		if (!IsRangeInside(decodedHeader.directoryOffset, directorySize, archiveSize))
+		if (!IsRangeInside(directoryOffset, directorySize, actualSize))
 		{
 			return ArchiveError::TruncatedDirectory;
 		}
 
 		// Both values are now <= archive.size(), so they fit in a size_t.
-		if (!reader.Seek(static_cast<std::size_t>(decodedHeader.directoryOffset)))
+		const std::span<const std::byte> directoryBytes =
+			archive.subspan(static_cast<std::size_t>(directoryOffset), static_cast<std::size_t>(directorySize));
+		if (ComputeCrc32(directoryBytes) != decodedHeader.directoryCrc)
 		{
-			return ArchiveError::TruncatedDirectory;
+			return ArchiveError::DirectoryChecksumMismatch;
 		}
 
+		// 4. Metadata of each entry.
+		ByteReader directoryReader(directoryBytes);
 		std::vector<AssetEntry> decodedEntries;
 		decodedEntries.reserve(decodedHeader.assetCount);
 
 		for (std::uint32_t i = 0; i < decodedHeader.assetCount; ++i)
 		{
 			AssetEntry entry;
-			if (const ArchiveResult result = ReadEntry(reader, entry); !result)
+			if (const ArchiveResult result = ReadEntry(directoryReader, entry); !result)
 			{
 				return result;
 			}
-
-			// Strictly increasing IDs: sorted (binary search works) and no duplicates.
-			if (!decodedEntries.empty() && entry.id <= decodedEntries.back().id)
+			if (const ArchiveResult result = ValidateEntry(entry, decodedEntries, directoryOffset, directorySize, actualSize); !result)
 			{
-				return ArchiveError::InvalidDirectory;
+				return result;
 			}
-
-			if (!IsRangeInside(entry.offset, entry.size, archiveSize))
-			{
-				return ArchiveError::AssetOutOfBounds;
-			}
-
 			decodedEntries.push_back(entry);
+		}
+
+		if (HasOverlappingData(decodedEntries))
+		{
+			return ArchiveError::OverlappingData;
+		}
+
+		// 5. Data: checksum of every asset (bounds were checked in step 4).
+		for (const AssetEntry& entry : decodedEntries)
+		{
+			const std::span<const std::byte> data =
+				archive.subspan(static_cast<std::size_t>(entry.offset), static_cast<std::size_t>(entry.size));
+			if (ComputeCrc32(data) != entry.crc32)
+			{
+				return ArchiveError::AssetChecksumMismatch;
+			}
 		}
 
 		header = decodedHeader;

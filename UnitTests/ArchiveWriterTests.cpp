@@ -7,6 +7,7 @@
 #include "Archive/ArchiveFormat.h"
 #include "Archive/ArchiveWriter.h"
 #include "ByteAccess/ByteReader.h"
+#include "Integrity/Crc32.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 using namespace asset;
@@ -165,12 +166,37 @@ namespace ArchiveTests
 			Assert::AreEqual(dataOffset + 4, header.archiveSize);
 			Assert::AreEqual(std::uint64_t{ archive.size() }, header.archiveSize);
 
-			Assert::IsTrue(AssetEntry{ 100, AssetType::Text, dataOffset, 1 } == entries[0]);
-			Assert::IsTrue(AssetEntry{ 200, AssetType::Binary, dataOffset + 1, 0 } == entries[1]);
-			Assert::IsTrue(AssetEntry{ 300, AssetType::Audio, dataOffset + 1, 3 } == entries[2]);
+			Assert::IsTrue(AssetEntry{ 100, AssetType::Text, dataOffset, 1, ComputeCrc32(Bytes({ 0xA1 })) } == entries[0]);
+			Assert::IsTrue(AssetEntry{ 200, AssetType::Binary, dataOffset + 1, 0, ComputeCrc32({}) } == entries[1]);
+			Assert::IsTrue(AssetEntry{ 300, AssetType::Audio, dataOffset + 1, 3, ComputeCrc32(Bytes({ 0xC1, 0xC2, 0xC3 })) } == entries[2]);
 
 			AssertBytesEqual(Bytes({ 0xA1, 0xC1, 0xC2, 0xC3 }),
 				std::span<const std::byte>(archive).subspan(static_cast<std::size_t>(dataOffset)));
+		}
+
+		TEST_METHOD(BuildStoresChecksums)
+		{
+			ArchiveWriter writer;
+			AssertOk(writer.AddAsset(1, AssetType::Text, Bytes({ 'a', 'b', 'c' })));
+			AssertOk(writer.AddAsset(2, AssetType::Mesh, std::vector<std::byte>(1000, std::byte{ 0x5A })));
+
+			const std::vector<std::byte> archive = writer.Build();
+			const std::span<const std::byte> bytes = archive;
+
+			ArchiveHeader header;
+			std::vector<AssetEntry> entries;
+			DecodeArchive(archive, header, entries); // ReadHeader also checks the header checksum
+
+			const std::span<const std::byte> directory = bytes.subspan(
+				static_cast<std::size_t>(header.directoryOffset), header.assetCount * kEntrySize);
+			Assert::AreEqual(ComputeCrc32(directory), header.directoryCrc, L"Wrong directory checksum");
+
+			for (const AssetEntry& entry : entries)
+			{
+				const std::span<const std::byte> data =
+					bytes.subspan(static_cast<std::size_t>(entry.offset), static_cast<std::size_t>(entry.size));
+				Assert::AreEqual(ComputeCrc32(data), entry.crc32, L"Wrong asset checksum");
+			}
 		}
 
 		TEST_METHOD(BuildIsRepeatable)

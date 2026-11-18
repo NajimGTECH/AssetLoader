@@ -1,5 +1,6 @@
 #pragma once
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <map>
 #include <span>
@@ -82,6 +83,8 @@ namespace asset
 		struct PendingAsset
 		{
 			AssetType type = AssetType::Unknown;
+			/** @brief CRC-32 of `data`, computed when the asset is added. */
+			std::uint32_t crc32 = 0;
 			std::vector<std::byte> data;
 		};
 

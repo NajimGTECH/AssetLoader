@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "TestHelpers.h"
+#include "ArchiveTestHelpers.h"
 
 #include <utility>
 
@@ -7,6 +8,7 @@
 #include "Archive/ArchiveReader.h"
 #include "Archive/ArchiveWriter.h"
 #include "ByteAccess/ByteWriter.h"
+#include "Integrity/Crc32.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 using namespace asset;
@@ -14,72 +16,6 @@ using namespace tests;
 
 namespace ArchiveTests
 {
-	namespace
-	{
-		const AssetId kTextId = MakeAssetId("intro.txt");
-		const AssetId kTextureId = MakeAssetId("player.png");
-		const AssetId kEmptyId = MakeAssetId("empty.bin");
-
-		/** A valid archive with three assets of different sizes (one of them empty). */
-		std::vector<std::byte> BuildSampleArchive()
-		{
-			ArchiveWriter writer;
-			AssertOk(writer.AddAsset(kTextId, AssetType::Text, Bytes({ 'H', 'e', 'l', 'l', 'o' })));
-			AssertOk(writer.AddAsset(kTextureId, AssetType::Texture, Bytes({ 0xFF, 0x00, 0x80, 0x7F, 0x01, 0x02, 0x03, 0x04 })));
-			AssertOk(writer.AddAsset(kEmptyId, AssetType::Binary, Bytes({})));
-			return writer.Build();
-		}
-
-		/**
-		 * Hand-built archive, for damaged-metadata tests: the header and the entries are written
-		 * exactly as given (no sorting, no offset computation), followed by `data`.
-		 */
-		std::vector<std::byte> BuildRawArchive(const ArchiveHeader& header, std::initializer_list<AssetEntry> entries,
-			std::span<const std::byte> data = {})
-		{
-			ByteWriter writer;
-			WriteHeader(writer, header);
-			for (const AssetEntry& entry : entries)
-			{
-				WriteEntry(writer, entry);
-			}
-			writer.WriteBytes(data);
-			return writer.ReleaseBuffer();
-		}
-
-		/** Header for BuildRawArchive with `count` entries placed right after the header. */
-		ArchiveHeader RawHeader(std::uint32_t count)
-		{
-			ArchiveHeader header;
-			header.assetCount = count;
-			header.directoryOffset = kHeaderSize;
-			return header;
-		}
-
-		/** Offset of the data section in a raw archive with `count` entries. */
-		constexpr std::uint64_t DataOffset(std::uint64_t count)
-		{
-			return kHeaderSize + count * kEntrySize;
-		}
-
-		/** Checks that every asset of BuildSampleArchive() can be found with the right content. */
-		void AssertSampleContent(const ArchiveReader& reader)
-		{
-			Assert::IsTrue(reader.IsOpen());
-			Assert::AreEqual(std::size_t{ 3 }, reader.GetAssetCount());
-
-			std::span<const std::byte> data;
-			AssertOk(reader.GetAssetData(kTextId, data));
-			AssertBytesEqual(Bytes({ 'H', 'e', 'l', 'l', 'o' }), data);
-
-			AssertOk(reader.GetAssetData(kTextureId, data));
-			AssertBytesEqual(Bytes({ 0xFF, 0x00, 0x80, 0x7F, 0x01, 0x02, 0x03, 0x04 }), data);
-
-			AssertOk(reader.GetAssetData(kEmptyId, data));
-			Assert::IsTrue(data.empty());
-		}
-	}
-
 	/*
 	* Reader tests: loading assets by ID, and rejecting damaged archives with the right error.
 	*/
@@ -220,15 +156,20 @@ namespace ArchiveTests
 			// Directory after the data, assets in a different order than their IDs: still valid.
 			const std::vector<std::byte> data = Bytes({ 'B', 'B', 'A' });
 
+			ByteWriter directory;
+			WriteEntry(directory, AssetEntry{ 1, AssetType::Text, kHeaderSize + 2, 1, ComputeCrc32(Bytes({ 'A' })) });
+			WriteEntry(directory, AssetEntry{ 2, AssetType::Text, kHeaderSize, 2, ComputeCrc32(Bytes({ 'B', 'B' })) });
+
 			ArchiveHeader header;
 			header.assetCount = 2;
 			header.directoryOffset = kHeaderSize + data.size();
+			header.archiveSize = kHeaderSize + data.size() + directory.GetSize();
+			header.directoryCrc = ComputeCrc32(directory.GetBuffer());
 
 			ByteWriter writer;
 			WriteHeader(writer, header);
 			writer.WriteBytes(data);
-			WriteEntry(writer, AssetEntry{ 1, AssetType::Text, kHeaderSize + 2, 1 });
-			WriteEntry(writer, AssetEntry{ 2, AssetType::Text, kHeaderSize, 2 });
+			writer.WriteBytes(directory.GetBuffer());
 
 			ArchiveReader reader;
 			AssertOk(reader.Open(writer.ReleaseBuffer()));
@@ -328,7 +269,7 @@ namespace ArchiveTests
 		TEST_METHOD(RejectsUnsupportedVersion)
 		{
 			std::vector<std::byte> archive = BuildSampleArchive();
-			archive[4] = std::byte{ 0x02 }; // version, low byte
+			archive[4] = static_cast<std::byte>(kArchiveVersion + 1); // version, low byte
 
 			ArchiveReader reader;
 			AssertFails(ArchiveError::UnsupportedVersion, reader.Open(std::move(archive)));
@@ -347,17 +288,20 @@ namespace ArchiveTests
 			}
 		}
 
-		TEST_METHOD(TruncationErrorsDependOnTheDamagedSection)
+		TEST_METHOD(TruncationIsReportedAsSuch)
 		{
+			// Inside the header: TruncatedHeader. Once the header is complete, the stored archive size
+			// tells that the file is truncated, wherever the cut is.
 			const std::vector<std::byte> archive = BuildSampleArchive();
 			const std::span<const std::byte> bytes = archive;
-			const std::size_t dataOffset = static_cast<std::size_t>(DataOffset(3));
 
 			ArchiveReader reader;
 			AssertFails(ArchiveError::TruncatedHeader, reader.Open(bytes.first(kHeaderSize - 1)));
-			AssertFails(ArchiveError::TruncatedDirectory, reader.Open(bytes.first(kHeaderSize)));
-			AssertFails(ArchiveError::TruncatedDirectory, reader.Open(bytes.first(dataOffset - 1)));
-			AssertFails(ArchiveError::AssetOutOfBounds, reader.Open(bytes.first(archive.size() - 1)));
+			for (std::size_t length = kHeaderSize; length < archive.size(); ++length)
+			{
+				AssertFails(ArchiveError::TruncatedArchive, reader.Open(bytes.first(length)),
+					(L"Wrong error at length " + std::to_wstring(length)).c_str());
+			}
 		}
 
 		TEST_METHOD(RejectsDirectoryInsideHeader)

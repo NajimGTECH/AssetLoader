@@ -6,6 +6,7 @@
 
 #include "ByteAccess/ByteWriter.h"
 #include "FileIO.h"
+#include "Integrity/Crc32.h"
 
 namespace asset
 {
@@ -33,6 +34,11 @@ namespace asset
 
 	ArchiveResult ArchiveWriter::AddAsset(AssetId id, AssetType type, std::span<const std::byte> data)
 	{
+		if (const ArchiveResult result = CheckNewAsset(id, type); !result)
+		{
+			return result; // checked before copying, so a rejected asset costs nothing
+		}
+
 		return AddAsset(id, type, std::vector<std::byte>(data.begin(), data.end()));
 	}
 
@@ -43,7 +49,9 @@ namespace asset
 			return result; // `data` was not moved from
 		}
 
-		m_assets.emplace(id, PendingAsset{ type, std::move(data) });
+		// The checksum is computed once here: the data cannot change after it is added.
+		const std::uint32_t crc32 = ComputeCrc32(data);
+		m_assets.emplace(id, PendingAsset{ type, crc32, std::move(data) });
 		return ArchiveError::None;
 	}
 
@@ -74,23 +82,27 @@ namespace asset
 			archiveSize += pending.data.size();
 		}
 
+		// The directory is encoded first, because its checksum is stored in the header.
+		ByteWriter directory(static_cast<std::size_t>(dataOffset - directoryOffset));
+		std::uint64_t nextDataOffset = dataOffset;
+		for (const auto& [id, pending] : m_assets)
+		{
+			WriteEntry(directory, AssetEntry{ id, pending.type, nextDataOffset, pending.data.size(), pending.crc32 });
+			nextDataOffset += pending.data.size();
+		}
+
 		ArchiveHeader header;
 		header.version = kArchiveVersion;
 		header.flags = 0;
 		header.assetCount = static_cast<std::uint32_t>(m_assets.size()); // bounded by CheckNewAsset
 		header.directoryOffset = directoryOffset;
 		header.archiveSize = archiveSize;
+		header.directoryCrc = ComputeCrc32(directory.GetBuffer());
 
 		// The whole archive is in memory anyway, so its size fits in a size_t.
 		ByteWriter writer(static_cast<std::size_t>(archiveSize));
-		WriteHeader(writer, header);
-
-		std::uint64_t nextDataOffset = dataOffset;
-		for (const auto& [id, pending] : m_assets)
-		{
-			WriteEntry(writer, AssetEntry{ id, pending.type, nextDataOffset, pending.data.size() });
-			nextDataOffset += pending.data.size();
-		}
+		WriteHeader(writer, header); // computes the header checksum
+		writer.WriteBytes(directory.GetBuffer());
 
 		for (const auto& [id, pending] : m_assets)
 		{

@@ -18,13 +18,23 @@ namespace asset
 	 * @class ArchiveReader
 	 * @brief Reads the header and directory of an archive, then gives access to each asset by ID.
 	 *
-	 * Opening an archive decodes the header and the whole directory and checks that:
-	 *  - the magic number and the version are correct,
-	 *  - the directory lies inside the data,
-	 *  - the IDs are sorted and unique (so lookups can use a binary search),
-	 *  - every asset (offset + size) lies inside the data.
+	 * Opening an archive decodes the header and the whole directory, then checks, in this order:
+	 *  1. Header: magic number, version, header checksum (InvalidMagic, UnsupportedVersion,
+	 *     TruncatedHeader, HeaderChecksumMismatch), reserved flags are 0 (InvalidHeader).
+	 *  2. Size: the data has exactly the size stored in the header (TruncatedArchive if shorter,
+	 *     ArchiveSizeMismatch if longer).
+	 *  3. Directory: it lies after the header and inside the data (InvalidDirectory,
+	 *     TruncatedDirectory), and its checksum matches (DirectoryChecksumMismatch).
+	 *  4. Metadata of each entry: ID is not 0 (InvalidAssetId), type is known (InvalidAssetType),
+	 *     IDs are sorted and unique (InvalidDirectory), data lies inside the archive
+	 *     (AssetOutOfBounds) and does not overlap the header, the directory or another asset
+	 *     (OverlappingData).
+	 *  5. Data: the checksum of every asset matches (AssetChecksumMismatch).
 	 *
-	 * After a successful Open, looking up an asset is O(log n) and can only fail with AssetNotFound.
+	 * Every byte of the archive is therefore checked once, when it is opened (the cost is one
+	 * CRC-32 pass over the data, about the same as reading it). After a successful Open, the whole
+	 * archive is known to be intact: looking up an asset is O(log n) and can only fail with
+	 * AssetNotFound.
 	 *
 	 * The archive can be read from:
 	 *  - a file: OpenFile() loads it into memory owned by the reader;

@@ -45,15 +45,32 @@ namespace asset
 		/** @brief An asset's offset / size points outside the archive data. */
 		AssetOutOfBounds,
 
+		// --- Integrity ---------------------------------------------------------------------
+
+		/** @brief The data is shorter than the archive size stored in the header: truncated file. */
+		TruncatedArchive,
+		/** @brief The data is longer than the archive size stored in the header (unexpected trailing bytes). */
+		ArchiveSizeMismatch,
+		/** @brief A header field has an invalid value (the reserved flags must be 0). */
+		InvalidHeader,
+		/** @brief Asset data overlaps the header, the directory or another asset. */
+		OverlappingData,
+		/** @brief The header checksum does not match: the header is corrupted. */
+		HeaderChecksumMismatch,
+		/** @brief The directory checksum does not match: the directory is corrupted. */
+		DirectoryChecksumMismatch,
+		/** @brief An asset's checksum does not match: its data is corrupted. */
+		AssetChecksumMismatch,
+
 		// --- Assets ------------------------------------------------------------------------
 
 		/** @brief No asset with this ID exists in the archive. */
 		AssetNotFound,
 		/** @brief An asset with this ID was already added to the archive. */
 		DuplicateAssetId,
-		/** @brief The asset ID is kInvalidAssetId (0). */
+		/** @brief The asset ID is kInvalidAssetId (0), when adding an asset or in an archive directory. */
 		InvalidAssetId,
-		/** @brief The asset type is AssetType::Unknown or not a known type. */
+		/** @brief The asset type is AssetType::Unknown or not a known type, when adding an asset or in an archive directory. */
 		InvalidAssetType,
 		/** @brief The archive cannot hold more assets (the count is stored on 32 bits). */
 		TooManyAssets,
@@ -85,6 +102,13 @@ namespace asset
 		case ArchiveError::TruncatedDirectory: return "the asset directory goes past the end of the archive";
 		case ArchiveError::InvalidDirectory:   return "the asset directory is invalid (unsorted or duplicated IDs)";
 		case ArchiveError::AssetOutOfBounds:   return "an asset lies outside the archive data";
+		case ArchiveError::TruncatedArchive:   return "the archive is truncated (shorter than the size stored in its header)";
+		case ArchiveError::ArchiveSizeMismatch: return "the archive is longer than the size stored in its header";
+		case ArchiveError::InvalidHeader:      return "invalid header field (reserved flags must be 0)";
+		case ArchiveError::OverlappingData:    return "asset data overlaps the header, the directory or another asset";
+		case ArchiveError::HeaderChecksumMismatch:    return "header checksum mismatch (corrupted header)";
+		case ArchiveError::DirectoryChecksumMismatch: return "directory checksum mismatch (corrupted directory)";
+		case ArchiveError::AssetChecksumMismatch:     return "asset checksum mismatch (corrupted asset data)";
 		case ArchiveError::AssetNotFound:      return "no asset with this ID in the archive";
 		case ArchiveError::DuplicateAssetId:   return "an asset with this ID already exists";
 		case ArchiveError::InvalidAssetId:     return "invalid asset ID (0 is reserved)";

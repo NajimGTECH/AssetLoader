@@ -27,8 +27,9 @@ build in either version without retargeting. Language standard: C++20.
 
 1. **ByteAccess**: low-level reading and writing of primitive values (`ByteWriter`, `ByteReader`).
 2. **Archive**: archive header, asset directory, IDs, types, offsets (`ArchiveWriter`, `ArchiveReader`).
-   Checksums *(to do)*.
-3. **Serialization**: conversion of C++ types to and from bytes, built on ByteAccess. *(to do)*
+3. **Integrity**: CRC-32 checksums (`Crc32`), used by the Archive layer to detect corrupted or
+   truncated archives.
+4. **Serialization**: conversion of C++ types to and from bytes, built on ByteAccess. *(to do)*
 
 Users include headers relative to `AssetEngine/include`, e.g. `#include "ByteAccess/ByteWriter.h"`.
 
@@ -130,25 +131,27 @@ them by ID. Built on the Byte Access Layer, so every value is little-endian with
 
 | Section    | Offset                   | Size                      |
 |------------|--------------------------|---------------------------|
-| Header     | 0                        | 28 bytes                  |
-| Directory  | `header.directoryOffset` | `assetCount` x 28 bytes   |
+| Header     | 0                        | 36 bytes                  |
+| Directory  | `header.directoryOffset` | `assetCount` x 32 bytes   |
 | Asset data | `entry.offset`           | `entry.size`, per asset   |
 
 The writer puts the directory right after the header and the data right after the directory. The
 reader only follows the stored offsets, so it does not depend on that order.
 
-**Header** (28 bytes)
+**Header** (36 bytes)
 
-| Offset | Type    | Field             | Value                                   |
-|--------|---------|-------------------|-----------------------------------------|
-| 0      | 4 bytes | `magic`           | `ASET` (`41 53 45 54`)                  |
-| 4      | uint16  | `version`         | `kArchiveVersion` (1)                   |
-| 6      | uint16  | `flags`           | 0 (reserved)                            |
-| 8      | uint32  | `assetCount`      | number of directory entries             |
-| 12     | uint64  | `directoryOffset` | absolute offset of the directory        |
-| 20     | uint64  | `archiveSize`     | total size of the archive, in bytes     |
+| Offset | Type    | Field             | Value                                         |
+|--------|---------|-------------------|-----------------------------------------------|
+| 0      | 4 bytes | `magic`           | `ASET` (`41 53 45 54`)                        |
+| 4      | uint16  | `version`         | `kArchiveVersion` (2)                         |
+| 6      | uint16  | `flags`           | 0 (reserved)                                  |
+| 8      | uint32  | `assetCount`      | number of directory entries                   |
+| 12     | uint64  | `directoryOffset` | absolute offset of the directory              |
+| 20     | uint64  | `archiveSize`     | total size of the archive, in bytes           |
+| 28     | uint32  | `directoryCrc`    | CRC-32 of the whole directory                 |
+| 32     | uint32  | `headerCrc`       | CRC-32 of the 32 header bytes before it       |
 
-**Directory entry** (28 bytes, sorted by strictly increasing ID)
+**Directory entry** (32 bytes, sorted by strictly increasing ID)
 
 | Offset | Type   | Field    | Value                                     |
 |--------|--------|----------|-------------------------------------------|
@@ -156,6 +159,11 @@ reader only follows the stored offsets, so it does not depend on that order.
 | 8      | uint32 | `type`   | `AssetType`                               |
 | 12     | uint64 | `offset` | absolute offset of the asset data         |
 | 20     | uint64 | `size`   | size of the asset data (may be 0)         |
+| 28     | uint32 | `crc32`  | CRC-32 of the asset data                  |
+
+Version history: version 1 had no checksums (28-byte header and entries). Version 2 added
+`directoryCrc`, `headerCrc` and the per-asset `crc32`. A version-1 file is rejected with
+`UnsupportedVersion`.
 
 Sorting the directory by ID lets the reader find an asset with a binary search, in O(log n).
 
@@ -220,14 +228,67 @@ Same approach as the Byte Access Layer: every operation returns a `[[nodiscard]]
 `asset::ArchiveResult` (true = success); `GetError()` gives an `asset::ArchiveError` and
 `asset::ToString(error)` a diagnostic message.
 
-When an archive is opened, the reader checks the magic number, the version, that the directory and
-every asset lie inside the data (overflow-safe checks done in 64 bits, so they also hold on x86),
-and that the IDs are sorted and unique. A damaged archive is rejected with `InvalidMagic`,
-`UnsupportedVersion`, `TruncatedHeader`, `TruncatedDirectory`, `InvalidDirectory` or
-`AssetOutOfBounds`. After a successful open, looking up an asset can only fail with `AssetNotFound`.
+When an archive is opened, every byte of it is checked (see *Integrity* below). After a successful
+open, the archive is known to be intact, and looking up an asset can only fail with `AssetNotFound`.
 
 Strong guarantee: a failed `AddAsset` leaves the writer unchanged, a failed `Open` keeps the
 previously open archive, and lookups never modify their output argument on failure.
+
+## Integrity
+
+Namespace `asset`, folder `Integrity/`.
+
+### CRC-32
+
+```cpp
+#include "Integrity/Crc32.h"
+
+std::uint32_t checksum = asset::ComputeCrc32(bytes);   // one call
+
+asset::Crc32 crc;                                      // or piece by piece
+crc.Update(firstPart);
+crc.Update(secondPart);
+checksum = crc.GetValue();
+```
+
+Standard CRC-32 (the one used by zip, PNG and gzip): reflected polynomial `0xEDB88320`, initial
+value and final XOR `0xFFFFFFFF`. Check value: `ComputeCrc32("123456789") == 0xCBF43926`. The
+256-entry lookup table is computed at compile time (`constexpr`).
+
+CRC-32 always detects 1-, 2- and 3-bit errors, any odd number of flipped bits, and any burst of
+errors up to 32 bits long; other random corruptions are missed with a probability of about 1 in
+4 billion. It is meant for accidental damage (disk, copy or transfer errors), not for deliberate
+tampering.
+
+### What the archive checks
+
+The writer stores a CRC-32 of the header, of the directory and of each asset. When an archive is
+opened, the reader checks, in this order:
+
+| Step | Check | Error |
+|------|-------|-------|
+| 1. Header    | magic number, version | `InvalidMagic`, `UnsupportedVersion` |
+|              | complete header, header checksum | `TruncatedHeader`, `HeaderChecksumMismatch` |
+|              | reserved flags are 0 | `InvalidHeader` |
+| 2. Size      | data shorter than `archiveSize` (truncated file) | `TruncatedArchive` |
+|              | data longer than `archiveSize` (extra bytes) | `ArchiveSizeMismatch` |
+| 3. Directory | after the header and inside the data | `InvalidDirectory`, `TruncatedDirectory` |
+|              | directory checksum | `DirectoryChecksumMismatch` |
+| 4. Metadata  | ID is not 0, type is a known `AssetType` | `InvalidAssetId`, `InvalidAssetType` |
+|              | IDs sorted and unique | `InvalidDirectory` |
+|              | data inside the archive (overflow-safe, in 64 bits) | `AssetOutOfBounds` |
+|              | data does not overlap the header, the directory or another asset | `OverlappingData` |
+| 5. Data      | checksum of every asset | `AssetChecksumMismatch` |
+
+- The header checksum is checked before `archiveSize` is used, so a corrupted size field is
+  reported as corruption, and a correct size reliably tells a truncated file from a damaged one.
+- The magic number and the version are checked before the header checksum, so a file of another
+  format or another version is reported as such.
+- The structural checks of steps 3 and 4 are kept even though the checksums passed: a checksum
+  only proves the bytes were not changed after writing, not that the writer produced valid
+  metadata (bug in another tool, hand-made file).
+- Every asset is verified when the archive is opened (one CRC pass over the data, about the cost
+  of reading it), so `GetAssetData` never returns corrupted bytes and stays `noexcept`.
 
 ## Tests
 
@@ -241,6 +302,11 @@ reference values, metadata checks of the writer (ID 0, invalid type, duplicates)
 contiguous layout, saving and loading files, loading 500 assets by ID, and rejection of damaged
 archives (truncation at every possible length, bad magic or version, unsorted or duplicated IDs,
 out-of-bounds or overflowing offsets and sizes).
+
+And the Integrity layer: CRC-32 reference values, cross-check with a bit-by-bit implementation,
+incremental computation, detection of every single-bit error; in archives, detection of any
+corrupted byte (header, directory or data, in memory and on disk), truncated files and trailing
+bytes, invalid metadata (reserved flags, ID 0, unknown types) and overlapping data.
 
 - **Visual Studio**: *Test > Run All Tests* (Test Explorer).
 - **Command line**, after building:

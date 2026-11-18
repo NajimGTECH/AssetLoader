@@ -97,9 +97,12 @@
     <ClCompile Include="ArchiveWriterTests.cpp" />
     <ClCompile Include="ByteReaderTests.cpp" />
     <ClCompile Include="ByteWriterTests.cpp" />
+    <ClCompile Include="Crc32Tests.cpp" />
+    <ClCompile Include="IntegrityTests.cpp" />
     <ClCompile Include="RoundTripTests.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ArchiveTestHelpers.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="TestHelpers.h" />
   </ItemGroup>
