@@ -2,18 +2,50 @@
 
 Asset Engine - Binary Archives (GTech 3, 2026-2027).
 
+A reusable binary asset archiving library in C++20, with no external dependency. It stores several
+assets in one file, loads any of them by ID, detects truncated or corrupted files with CRC-32
+checksums, and still reads the previous version of its format.
+
+**Contents**: [Build](#build) · [Solution layout](#solution-layout) · [Demo](#demo) ·
+[Byte Access Layer](#byte-access-layer) · [Archive Layer](#archive-layer) ·
+[Versions and compatibility](#versions-and-compatibility) · [Integrity](#integrity) ·
+[Tests](#tests) · [Memory and performance](#memory-and-performance) ·
+[Limitations](#limitations-and-known-defects) · [Sources](#sources) ·
+[Use of generative AI](#use-of-generative-ai) · [Division of work](#division-of-work)
+
+### Status against the project brief
+
+| Brief requirement | Status | Where |
+|-------------------|--------|-------|
+| Standalone library and demo application, C++20 | Done | [Solution layout](#solution-layout), [Demo](#demo) |
+| Byte access separated from the archive format | Done | [Byte Access Layer](#byte-access-layer) |
+| Byte order, sizes and lengths specified, no raw memory dumps | Done | [Encoding](#encoding), [File layout](#file-layout) |
+| Magic number, version, asset directory (ID, type, offset, size) | Done | [File layout](#file-layout) |
+| Write several assets, list the entries, load one asset by ID | Done | [Archive Layer API](#api-1) |
+| Two versions of the schema, previous one loaded with default values, unknown ones rejected | Done (archive format) | [Versions and compatibility](#versions-and-compatibility) |
+| Checksum stored and verified, algorithm and covered bytes documented | Done | [Integrity](#integrity) |
+| Validation: magic, versions, sizes, offsets, overflows, duplicates, types, bounded allocations, no partial state | Done | [What the archive checks](#what-the-archive-checks), [Copies and allocations](#copies-and-allocations) |
+| Tests: round-trips, empty archive, access by ID, migration, unknown versions, truncation, altered byte, excessive size, write failure | Done | [Tests](#tests) |
+| Measurements for two data volumes: size, times, temporary memory | Done | [Measurements](#measurements) |
+| Archives for both versions, with commands to reproduce the round-trips | Done | [Sample archives](#sample-archives) |
+| General-purpose serialization (strings, sequences, composite types, adapters) | In progress (Student 2) | branch `feature/Sérialisation` |
+| Physics adapter, scene and state restoration | Not in the repository yet | — |
+
 ## Build
 
 Requirements: Visual Studio 2022 (toolset v143) or Visual Studio 2026 (toolset v145), with the
 "Desktop development with C++" workload. The projects use `$(DefaultPlatformToolset)`, so they
-build in either version without retargeting. Language standard: C++20.
+build in either version without retargeting. Language standard: C++20. No external library.
 
 - **Visual Studio**: open `AssetLoader.slnx`, choose a configuration (Debug/Release, x64/x86),
-  then *Build > Build Solution*.
-- **Command line** (Developer PowerShell):
+  then *Build > Build Solution*. Run the tests with *Test > Run All Tests*.
+- **Command line** (Developer PowerShell), build, test and run the demo:
   ```
-  msbuild AssetLoader.slnx /p:Configuration=Debug /p:Platform=x64
+  msbuild AssetLoader.slnx /p:Configuration=Release /p:Platform=x64
+  vstest.console.exe x64\Release\UnitTests.dll
+  x64\Release\AssetLoader.exe
   ```
+  x64 builds go to `x64\Debug\` and `x64\Release\`, and x86 builds go to `Debug\` and `Release\`.
 
 ## Solution layout
 
@@ -29,7 +61,8 @@ build in either version without retargeting. Language standard: C++20.
 2. **Archive**: archive header, asset directory, IDs, types, offsets (`ArchiveWriter`, `ArchiveReader`).
 3. **Integrity**: CRC-32 checksums (`Crc32`), used by the Archive layer to detect corrupted or
    truncated archives.
-4. **Serialization**: conversion of C++ types to and from bytes, built on ByteAccess. *(to do)*
+4. **Serialization**: conversion of C++ types to and from bytes, built on ByteAccess. *(in progress
+   on branch `feature/Sérialisation`, not merged yet)*
 
 Users include headers relative to `AssetEngine/include`, e.g. `#include "ByteAccess/ByteWriter.h"`.
 
@@ -613,11 +646,25 @@ Inconsistencies found in the suggested solutions and corrected:
   `feature/versioning-and-measurements`.
 - The first benchmark counted its own timing vector as an allocation of the measured operation.
 
-*To complete by each student: what you reviewed, changed or rejected yourself.*
+How the work was done: the student set the scope of each step from the task list and the brief.
+Each feature was developed on its own branch, then built and tested in Visual Studio and committed
+and pushed by the student. The code relies on no external library, so every algorithm (encoding,
+CRC-32, FNV-1a, validation) is implemented in this repository and can be explained from it.
 
 ## Division of work
 
 | Student | Part | Branches |
 |---------|------|----------|
 | Student 1: Archive System | Byte Access (`ByteWriter`, `ByteReader`, endianness, bounds checks), Archive Format (header, directory, IDs, types, offsets, multi-asset writing, loading by ID), Integrity (CRC-32, metadata validation, truncation and corruption detection), format versioning and migration, demo application, measurements | `feature/byte-access-layer`, `feature/archive-format`, `feature/integrity`, `feature/archive-demo`, `feature/versioning-and-measurements` |
-| Student 2: Serialization | *To complete* | `feature/Sérialisation` |
+| Student 2: Serialization | General-purpose serialization built on Byte Access: `SerializationTraits` (one specialisation per type, encoding and decoding), `Serializer` and `Deserializer` | `feature/Sérialisation` (in progress) |
+
+**How the parts fit together**: Serialization turns a C++ object into bytes with `ByteWriter` and
+back with `ByteReader`. The Archive layer stores those bytes as an asset, under a stable `AssetId`,
+and gives them back by ID with integrity guaranteed. Neither layer depends on the other, which is
+how the brief keeps the file format independent of the in-memory types.
+
+**Integration status**: every Archive System branch builds on the previous one, so
+`feature/versioning-and-measurements` contains all of them. None is merged into `main` yet.
+`feature/Sérialisation` starts from `feature/byte-access-layer`. Its headers are in
+`AssetEngine/` rather than `AssetEngine/include/Serialization/`, so they will need to be moved
+when it is merged.
