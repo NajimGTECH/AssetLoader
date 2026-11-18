@@ -20,7 +20,7 @@ build in either version without retargeting. Language standard: C++20.
 | Project       | Type           | Content                                                      |
 |---------------|----------------|--------------------------------------------------------------|
 | `AssetEngine` | Static library | The archiving library. Public headers in `include/`, implementation in `src/`. |
-| `AssetLoader` | Console app    | Demo application.                                            |
+| `AssetLoader` | Console app    | Demo of the archive system (see [Demo](#demo)).              |
 | `UnitTests`   | Native test DLL| Microsoft C++ Unit Test Framework tests for `AssetEngine`.   |
 
 `AssetEngine` is split into layers, each in its own folder under `include/` and `src/`:
@@ -32,6 +32,24 @@ build in either version without retargeting. Language standard: C++20.
 4. **Serialization**: conversion of C++ types to and from bytes, built on ByteAccess. *(to do)*
 
 Users include headers relative to `AssetEngine/include`, e.g. `#include "ByteAccess/ByteWriter.h"`.
+
+## Demo
+
+`AssetLoader` (set it as the startup project and press Ctrl+F5) walks through the archive system:
+
+1. **Writing**: adds a text, a small 4x4 RGBA texture and a config file to an `ArchiveWriter`
+   (a second asset with the same ID is refused), then saves the archive.
+2. **Reading**: opens the file with `ArchiveReader` and prints the header and the asset directory
+   (ID, type, offset, size, CRC-32).
+3. **Loading by ID**: gets the text without a copy, loads the texture into a vector, and asks for
+   an asset that is not in the archive.
+4. **Damaged archives**: wrong magic number, one bit flipped in the header, in the directory and in
+   an asset, a file cut short, an extra byte at the end, a missing file. Each one is refused with
+   its own error.
+
+Each step prints its result. The program returns 0 when every step gave the expected result.
+The archive is written to `%TEMP%\AssetLoaderDemo.aset`; pass another path as the first argument
+to write it somewhere else: `AssetLoader.exe my-archive.aset`.
 
 ## Byte Access Layer
 
