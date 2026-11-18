@@ -31,11 +31,16 @@ namespace asset
 		writer.WriteUInt32(header.assetCount);
 		writer.WriteUInt64(header.directoryOffset);
 		writer.WriteUInt64(header.archiveSize);
-		writer.WriteUInt32(header.directoryCrc);
 
-		// The header checksum covers every header byte written above (magic included).
-		const std::uint32_t headerCrc = ComputeCrc32(writer.GetBuffer().subspan(start, kHeaderCrcCoveredSize));
-		writer.WriteUInt32(headerCrc);
+		if (HasChecksums(header.version))
+		{
+			writer.WriteUInt32(header.directoryCrc);
+
+			// The header checksum covers every header byte written above (magic included).
+			const std::size_t coveredSize = GetHeaderSize(header.version) - 4;
+			const std::uint32_t headerCrc = ComputeCrc32(writer.GetBuffer().subspan(start, coveredSize));
+			writer.WriteUInt32(headerCrc);
+		}
 	}
 
 	ArchiveResult ReadHeader(ByteReader& reader, ArchiveHeader& header) noexcept
@@ -60,28 +65,39 @@ namespace asset
 		{
 			return Rewind(reader, start, ArchiveError::TruncatedHeader);
 		}
-		if (decoded.version != kArchiveVersion)
+		if (!IsSupportedArchiveVersion(decoded.version))
 		{
 			return Rewind(reader, start, ArchiveError::UnsupportedVersion);
 		}
 
-		// 3. The rest of the header.
-		std::uint32_t storedHeaderCrc = 0;
+		// 3. The rest of the header, in the layout of its version.
 		if (!reader.ReadUInt16(decoded.flags)
 			|| !reader.ReadUInt32(decoded.assetCount)
 			|| !reader.ReadUInt64(decoded.directoryOffset)
-			|| !reader.ReadUInt64(decoded.archiveSize)
-			|| !reader.ReadUInt32(decoded.directoryCrc)
-			|| !reader.ReadUInt32(storedHeaderCrc))
+			|| !reader.ReadUInt64(decoded.archiveSize))
 		{
 			return Rewind(reader, start, ArchiveError::TruncatedHeader);
 		}
 
-		// 4. Checksum of everything read before the headerCrc field.
-		const std::uint32_t actualHeaderCrc = ComputeCrc32(reader.GetBuffer().subspan(start, kHeaderCrcCoveredSize));
-		if (actualHeaderCrc != storedHeaderCrc)
+		if (HasChecksums(decoded.version))
 		{
-			return Rewind(reader, start, ArchiveError::HeaderChecksumMismatch);
+			std::uint32_t storedHeaderCrc = 0;
+			if (!reader.ReadUInt32(decoded.directoryCrc) || !reader.ReadUInt32(storedHeaderCrc))
+			{
+				return Rewind(reader, start, ArchiveError::TruncatedHeader);
+			}
+
+			// 4. Checksum of everything read before the headerCrc field.
+			const std::size_t coveredSize = GetHeaderSize(decoded.version) - 4;
+			if (ComputeCrc32(reader.GetBuffer().subspan(start, coveredSize)) != storedHeaderCrc)
+			{
+				return Rewind(reader, start, ArchiveError::HeaderChecksumMismatch);
+			}
+		}
+		else
+		{
+			// Migration from version 1: the field added in version 2 gets its default value.
+			decoded.directoryCrc = 0;
 		}
 
 		header = decoded;
@@ -90,30 +106,33 @@ namespace asset
 
 	// --- Directory entries -------------------------------------------------------------------
 
-	void WriteEntry(ByteWriter& writer, const AssetEntry& entry)
+	void WriteEntry(ByteWriter& writer, const AssetEntry& entry, std::uint16_t version)
 	{
 		writer.WriteUInt64(entry.id);
 		writer.WriteUInt32(static_cast<std::uint32_t>(entry.type));
 		writer.WriteUInt64(entry.offset);
 		writer.WriteUInt64(entry.size);
-		writer.WriteUInt32(entry.crc32);
+		if (HasChecksums(version))
+		{
+			writer.WriteUInt32(entry.crc32);
+		}
 	}
 
-	ArchiveResult ReadEntry(ByteReader& reader, AssetEntry& entry) noexcept
+	ArchiveResult ReadEntry(ByteReader& reader, AssetEntry& entry, std::uint16_t version) noexcept
 	{
 		// Checking the size up front means the field reads below cannot fail half-way.
-		if (!reader.CanRead(kEntrySize))
+		if (!reader.CanRead(GetEntrySize(version)))
 		{
 			return ArchiveError::TruncatedDirectory;
 		}
 
-		AssetEntry decoded;
+		AssetEntry decoded; // crc32 keeps its default value 0 when the version does not store it
 		std::uint32_t type = 0;
 		if (!reader.ReadUInt64(decoded.id)
 			|| !reader.ReadUInt32(type)
 			|| !reader.ReadUInt64(decoded.offset)
 			|| !reader.ReadUInt64(decoded.size)
-			|| !reader.ReadUInt32(decoded.crc32))
+			|| (HasChecksums(version) && !reader.ReadUInt32(decoded.crc32)))
 		{
 			return ArchiveError::TruncatedDirectory; // unreachable, kept for safety
 		}

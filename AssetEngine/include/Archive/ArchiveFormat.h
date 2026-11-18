@@ -56,10 +56,17 @@
  * headerCrc, the directory by directoryCrc, and each asset by its entry's crc32. archiveSize lets
  * the reader tell a truncated file (or one with extra bytes) from a corrupted one.
  *
- * Version history
- * ---------------
- *  - 1: header (28 bytes) and directory entries (28 bytes) without checksums.
- *  - 2: adds directoryCrc / headerCrc to the header and crc32 to each entry.
+ * Version history and compatibility
+ * ---------------------------------
+ *  - 1: header (28 bytes) and directory entries (28 bytes) without checksums: the same tables
+ *       without directoryCrc, headerCrc and crc32.
+ *  - 2 (current): adds directoryCrc / headerCrc to the header and crc32 to each entry. The new
+ *       fields are appended at the end of the header and of each entry; nothing else moved.
+ *
+ * The reader loads every version from kOldestArchiveVersion to kArchiveVersion. When it reads a
+ * version-1 archive, the fields added in version 2 get their default value (0) and the checksum
+ * checks are skipped (see HasChecksums()); all other checks still apply. Any other version is
+ * rejected with UnsupportedVersion.
  */
 namespace asset
 {
@@ -73,14 +80,41 @@ namespace asset
 	/** @brief Current version of the archive format. Increase it when the layout changes. */
 	inline constexpr std::uint16_t kArchiveVersion = 2;
 
-	/** @brief Size of the encoded header, in bytes. */
-	inline constexpr std::size_t kHeaderSize = 4 + 2 + 2 + 4 + 8 + 8 + 4 + 4;
+	/** @brief Oldest version the reader can still load. */
+	inline constexpr std::uint16_t kOldestArchiveVersion = 1;
+
+	/** @brief True if the reader can load archives of this version. */
+	[[nodiscard]] constexpr bool IsSupportedArchiveVersion(std::uint16_t version) noexcept
+	{
+		return version >= kOldestArchiveVersion && version <= kArchiveVersion;
+	}
+
+	/** @brief True if archives of this version store checksums (version 2 and later). */
+	[[nodiscard]] constexpr bool HasChecksums(std::uint16_t version) noexcept
+	{
+		return version >= 2;
+	}
+
+	/** @brief Size of the encoded header for a format version: 28 bytes in version 1, 36 since version 2. */
+	[[nodiscard]] constexpr std::size_t GetHeaderSize(std::uint16_t version) noexcept
+	{
+		return 4 + 2 + 2 + 4 + 8 + 8 + (HasChecksums(version) ? 4 + 4 : 0);
+	}
+
+	/** @brief Size of one encoded directory entry for a format version: 28 bytes in version 1, 32 since version 2. */
+	[[nodiscard]] constexpr std::size_t GetEntrySize(std::uint16_t version) noexcept
+	{
+		return 8 + 4 + 8 + 8 + (HasChecksums(version) ? 4 : 0);
+	}
+
+	/** @brief Size of the encoded header in the current version, in bytes. */
+	inline constexpr std::size_t kHeaderSize = GetHeaderSize(kArchiveVersion);
 
 	/** @brief Number of header bytes covered by headerCrc (everything before the headerCrc field). */
 	inline constexpr std::size_t kHeaderCrcCoveredSize = kHeaderSize - 4;
 
-	/** @brief Size of one encoded directory entry, in bytes. */
-	inline constexpr std::size_t kEntrySize = 8 + 4 + 8 + 8 + 4;
+	/** @brief Size of one encoded directory entry in the current version, in bytes. */
+	inline constexpr std::size_t kEntrySize = GetEntrySize(kArchiveVersion);
 
 	/**
 	 * @brief Archive header, decoded. See the table in the file comment for the encoding.
@@ -90,12 +124,13 @@ namespace asset
 	 */
 	struct ArchiveHeader
 	{
+		/** @brief Format version of the archive. Selects the header and entry layouts. */
 		std::uint16_t version = kArchiveVersion;
 		std::uint16_t flags = 0;
 		std::uint32_t assetCount = 0;
 		std::uint64_t directoryOffset = kHeaderSize;
 		std::uint64_t archiveSize = kHeaderSize;
-		/** @brief CRC-32 of the assetCount * kEntrySize directory bytes. */
+		/** @brief CRC-32 of the assetCount * entry size directory bytes. 0 in version 1 (not stored). */
 		std::uint32_t directoryCrc = 0;
 
 		[[nodiscard]] friend constexpr bool operator==(const ArchiveHeader&, const ArchiveHeader&) noexcept = default;
@@ -112,17 +147,18 @@ namespace asset
 		std::uint64_t offset = 0;
 		/** @brief Size of the asset data, in bytes. */
 		std::uint64_t size = 0;
-		/** @brief CRC-32 of the asset data. */
+		/** @brief CRC-32 of the asset data. 0 in version 1 (not stored). */
 		std::uint32_t crc32 = 0;
 
 		[[nodiscard]] friend constexpr bool operator==(const AssetEntry&, const AssetEntry&) noexcept = default;
 	};
 
 	/**
-	 * @brief Writes the header: exactly kHeaderSize bytes.
+	 * @brief Writes the header in the layout of `header.version`: exactly GetHeaderSize(header.version) bytes.
 	 *
-	 * The magic number and the header checksum (headerCrc) are computed here, so the written header
-	 * is always self-consistent.
+	 * The magic number and, since version 2, the header checksum (headerCrc) are computed here, so
+	 * the written header is always self-consistent. Versions below 2 are written without checksums
+	 * (directoryCrc is ignored). Writing an unsupported version is allowed, to produce test data.
 	 */
 	void WriteHeader(ByteWriter& writer, const ArchiveHeader& header);
 
@@ -131,29 +167,37 @@ namespace asset
 	 *
 	 * Checks, in this order:
 	 *  1. the magic number (InvalidMagic; TruncatedHeader if fewer than 4 bytes),
-	 *  2. the version (UnsupportedVersion),
-	 *  3. that the whole header is present (TruncatedHeader),
-	 *  4. the header checksum (HeaderChecksumMismatch).
+	 *  2. the version, which must be supported (UnsupportedVersion),
+	 *  3. that the whole header of that version is present (TruncatedHeader),
+	 *  4. since version 2, the header checksum (HeaderChecksumMismatch).
 	 * The magic and version are checked before the size, so a file of another format or of another
 	 * version is reported as such, even if its header is shorter.
+	 *
+	 * Version 1 headers are migrated while decoding: directoryCrc, which version 1 does not store,
+	 * is set to its default value 0.
 	 *
 	 * The other fields are only decoded: checking them against the archive is the ArchiveReader's job.
 	 *
 	 * Strong guarantee: on failure, `header` is not modified and the reader position does not move.
-	 * On success, the position advances by kHeaderSize.
+	 * On success, the position advances by GetHeaderSize(header.version).
 	 */
 	ArchiveResult ReadHeader(ByteReader& reader, ArchiveHeader& header) noexcept;
 
-	/** @brief Writes one directory entry: exactly kEntrySize bytes. */
-	void WriteEntry(ByteWriter& writer, const AssetEntry& entry);
+	/**
+	 * @brief Writes one directory entry in the layout of `version`: exactly GetEntrySize(version) bytes.
+	 *
+	 * Versions below 2 do not store crc32.
+	 */
+	void WriteEntry(ByteWriter& writer, const AssetEntry& entry, std::uint16_t version = kArchiveVersion);
 
 	/**
-	 * @brief Reads one directory entry written by WriteEntry().
+	 * @brief Reads one directory entry written by WriteEntry() with the same `version`.
 	 *
 	 * Only decodes the fields; it does not check them against the archive (that is the
-	 * ArchiveReader's job). Returns TruncatedDirectory if fewer than kEntrySize bytes remain.
+	 * ArchiveReader's job). Returns TruncatedDirectory if fewer than GetEntrySize(version) bytes remain.
+	 * In version 1, crc32 is not stored and is set to its default value 0.
 	 *
 	 * Strong guarantee: on failure, `entry` is not modified and the reader position does not move.
 	 */
-	ArchiveResult ReadEntry(ByteReader& reader, AssetEntry& entry) noexcept;
+	ArchiveResult ReadEntry(ByteReader& reader, AssetEntry& entry, std::uint16_t version = kArchiveVersion) noexcept;
 }

@@ -197,14 +197,113 @@ namespace ArchiveTests
 
 		TEST_METHOD(ReadHeaderChecksVersionBeforeSize)
 		{
-			// A version-1 header is shorter (28 bytes): it must be reported as an unsupported
+			// An unknown version may have any header size: it must be reported as an unsupported
 			// version, not as a truncated header.
-			std::vector<std::byte> versionOne = Bytes({ 'A', 'S', 'E', 'T', 0x01, 0x00 });
-			versionOne.resize(28);
+			for (const std::uint16_t version : { std::uint16_t{ 0 }, std::uint16_t{ kArchiveVersion + 1 }, std::uint16_t{ 0xFFFF } })
+			{
+				const std::vector<std::byte> bytes = Bytes({ 'A', 'S', 'E', 'T',
+					static_cast<std::uint8_t>(version & 0xFF), static_cast<std::uint8_t>(version >> 8) });
 
-			ByteReader reader(versionOne);
+				ByteReader reader(bytes);
+				ArchiveHeader header;
+				AssertFails(ArchiveError::UnsupportedVersion, ReadHeader(reader, header));
+			}
+		}
+
+		TEST_METHOD(SizesDependOnTheVersion)
+		{
+			Assert::AreEqual(std::size_t{ 28 }, GetHeaderSize(1));
+			Assert::AreEqual(std::size_t{ 28 }, GetEntrySize(1));
+			Assert::AreEqual(std::size_t{ 36 }, GetHeaderSize(2));
+			Assert::AreEqual(std::size_t{ 32 }, GetEntrySize(2));
+			Assert::AreEqual(GetHeaderSize(kArchiveVersion), kHeaderSize);
+			Assert::AreEqual(GetEntrySize(kArchiveVersion), kEntrySize);
+
+			Assert::IsFalse(IsSupportedArchiveVersion(0));
+			Assert::IsTrue(IsSupportedArchiveVersion(1));
+			Assert::IsTrue(IsSupportedArchiveVersion(2));
+			Assert::IsFalse(IsSupportedArchiveVersion(kArchiveVersion + 1));
+		}
+
+		TEST_METHOD(WriteHeaderVersion1ExactBytes)
+		{
 			ArchiveHeader header;
-			AssertFails(ArchiveError::UnsupportedVersion, ReadHeader(reader, header));
+			header.version = 1;
+			header.assetCount = 2;
+			header.directoryOffset = 28;
+			header.archiveSize = 0x0102;
+			header.directoryCrc = 0xDEADBEEF; // not part of version 1: must not be written
+
+			ByteWriter writer;
+			WriteHeader(writer, header);
+
+			AssertBytesEqual(Bytes({
+				'A', 'S', 'E', 'T',
+				0x01, 0x00,                                     // version 1
+				0x00, 0x00,                                     // flags
+				0x02, 0x00, 0x00, 0x00,                         // assetCount
+				0x1C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // directoryOffset = 28
+				0x02, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // archiveSize
+			}), writer.GetBuffer());
+		}
+
+		TEST_METHOD(ReadHeaderMigratesVersion1)
+		{
+			ArchiveHeader written;
+			written.version = 1;
+			written.assetCount = 2;
+			written.directoryOffset = 28;
+			written.archiveSize = 1000;
+
+			ByteWriter writer;
+			WriteHeader(writer, written);
+			writer.WriteUInt32(0xFFFFFFFFu); // whatever follows the header must not be read
+
+			ByteReader reader(writer.GetBuffer());
+			ArchiveHeader header;
+			header.directoryCrc = 0x12345678u;
+			AssertOk(ReadHeader(reader, header));
+
+			Assert::AreEqual(std::uint16_t{ 1 }, header.version);
+			Assert::AreEqual(std::uint32_t{ 2 }, header.assetCount);
+			Assert::AreEqual(std::uint64_t{ 28 }, header.directoryOffset);
+			Assert::AreEqual(std::uint64_t{ 1000 }, header.archiveSize);
+			Assert::AreEqual(std::uint32_t{ 0 }, header.directoryCrc, L"Added field must get its default value");
+			Assert::AreEqual(std::size_t{ 28 }, reader.GetPosition());
+		}
+
+		TEST_METHOD(ReadHeaderRejectsTruncatedVersion1Header)
+		{
+			ArchiveHeader written;
+			written.version = 1;
+			ByteWriter writer;
+			WriteHeader(writer, written);
+
+			for (std::size_t length = 6; length < GetHeaderSize(1); ++length)
+			{
+				ByteReader reader(writer.GetBuffer().first(length));
+				ArchiveHeader header;
+				AssertFails(ArchiveError::TruncatedHeader, ReadHeader(reader, header));
+				Assert::AreEqual(std::size_t{ 0 }, reader.GetPosition(), L"Position moved on failure");
+			}
+		}
+
+		TEST_METHOD(EntryVersion1RoundTrip)
+		{
+			const AssetEntry written{ 0x1122334455667788ull, AssetType::Mesh, 100, 200, 0xCAFEBABEu };
+
+			ByteWriter writer;
+			WriteEntry(writer, written, 1);
+			Assert::AreEqual(std::size_t{ 28 }, writer.GetSize(), L"Version 1 entries have no crc32");
+
+			ByteReader reader(writer.GetBuffer());
+			AssetEntry entry;
+			AssertOk(ReadEntry(reader, entry, 1));
+
+			AssetEntry expected = written;
+			expected.crc32 = 0; // not stored in version 1: default value
+			Assert::IsTrue(expected == entry);
+			Assert::IsTrue(reader.IsAtEnd());
 		}
 
 		// --- Directory entries --------------------------------------------------------------

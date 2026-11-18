@@ -23,10 +23,11 @@ namespace tests
 	inline const asset::AssetId kTextureId = asset::MakeAssetId("player.png");
 	inline const asset::AssetId kEmptyId = asset::MakeAssetId("empty.bin");
 
-	/** @brief A valid archive with three assets of different sizes (one of them empty). */
-	inline std::vector<std::byte> BuildSampleArchive()
+	/** @brief A valid archive with three assets of different sizes (one of them empty), in format `version`. */
+	inline std::vector<std::byte> BuildSampleArchive(std::uint16_t version = asset::kArchiveVersion)
 	{
 		asset::ArchiveWriter writer;
+		AssertOk(writer.SetFormatVersion(version));
 		AssertOk(writer.AddAsset(kTextId, asset::AssetType::Text, Bytes({ 'H', 'e', 'l', 'l', 'o' })));
 		AssertOk(writer.AddAsset(kTextureId, asset::AssetType::Texture, Bytes({ 0xFF, 0x00, 0x80, 0x7F, 0x01, 0x02, 0x03, 0x04 })));
 		AssertOk(writer.AddAsset(kEmptyId, asset::AssetType::Binary, Bytes({})));

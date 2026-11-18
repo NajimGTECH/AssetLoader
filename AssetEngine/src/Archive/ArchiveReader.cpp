@@ -41,7 +41,8 @@ namespace asset
 		 * `previous` holds the entries already validated, in directory order.
 		 */
 		[[nodiscard]] ArchiveResult ValidateEntry(const AssetEntry& entry, const std::vector<AssetEntry>& previous,
-			std::uint64_t directoryOffset, std::uint64_t directorySize, std::uint64_t archiveSize) noexcept
+			std::uint64_t headerSize, std::uint64_t directoryOffset, std::uint64_t directorySize,
+			std::uint64_t archiveSize) noexcept
 		{
 			if (entry.id == kInvalidAssetId)
 			{
@@ -64,7 +65,7 @@ namespace asset
 			}
 
 			// Asset data must not be read from the header or the directory.
-			if (RangesOverlap(entry.offset, entry.size, 0, kHeaderSize)
+			if (RangesOverlap(entry.offset, entry.size, 0, headerSize)
 				|| RangesOverlap(entry.offset, entry.size, directoryOffset, directorySize))
 			{
 				return ArchiveError::OverlappingData;
@@ -159,8 +160,14 @@ namespace asset
 			return ArchiveError::InvalidHeader;
 		}
 
+		// The layout depends on the version (ReadHeader only accepts supported versions).
+		const std::uint16_t version = decodedHeader.version;
+		const bool hasChecksums = asset::HasChecksums(version);
+		const std::uint64_t headerSize = GetHeaderSize(version);
+		const std::uint64_t entrySize = GetEntrySize(version);
+
 		// 2. Size: detects truncated files (and extra bytes) before anything else is read.
-		//    The header checksum passed, so the stored size itself is trustworthy.
+		//    Since version 2 the header checksum passed, so the stored size itself is trustworthy.
 		if (actualSize < decodedHeader.archiveSize)
 		{
 			return ArchiveError::TruncatedArchive;
@@ -174,11 +181,13 @@ namespace asset
 		//    These checks stay even though the size matched: a header with a valid checksum can
 		//    still contain wrong offsets (bug in another writer, hand-made file...).
 		const std::uint64_t directoryOffset = decodedHeader.directoryOffset;
-		const std::uint64_t directorySize = std::uint64_t{ decodedHeader.assetCount } * kEntrySize; // < 2^37, no overflow
-		if (directoryOffset < kHeaderSize)
+		const std::uint64_t directorySize = std::uint64_t{ decodedHeader.assetCount } * entrySize; // < 2^37, no overflow
+		if (directoryOffset < headerSize)
 		{
 			return ArchiveError::InvalidDirectory;
 		}
+		// Also bounds the allocation below: assetCount entries must really be present in the data,
+		// so a corrupted count cannot make the reader reserve gigabytes.
 		if (!IsRangeInside(directoryOffset, directorySize, actualSize))
 		{
 			return ArchiveError::TruncatedDirectory;
@@ -187,7 +196,7 @@ namespace asset
 		// Both values are now <= archive.size(), so they fit in a size_t.
 		const std::span<const std::byte> directoryBytes =
 			archive.subspan(static_cast<std::size_t>(directoryOffset), static_cast<std::size_t>(directorySize));
-		if (ComputeCrc32(directoryBytes) != decodedHeader.directoryCrc)
+		if (hasChecksums && ComputeCrc32(directoryBytes) != decodedHeader.directoryCrc)
 		{
 			return ArchiveError::DirectoryChecksumMismatch;
 		}
@@ -200,11 +209,11 @@ namespace asset
 		for (std::uint32_t i = 0; i < decodedHeader.assetCount; ++i)
 		{
 			AssetEntry entry;
-			if (const ArchiveResult result = ReadEntry(directoryReader, entry); !result)
+			if (const ArchiveResult result = ReadEntry(directoryReader, entry, version); !result)
 			{
 				return result;
 			}
-			if (const ArchiveResult result = ValidateEntry(entry, decodedEntries, directoryOffset, directorySize, actualSize); !result)
+			if (const ArchiveResult result = ValidateEntry(entry, decodedEntries, headerSize, directoryOffset, directorySize, actualSize); !result)
 			{
 				return result;
 			}
@@ -216,14 +225,17 @@ namespace asset
 			return ArchiveError::OverlappingData;
 		}
 
-		// 5. Data: checksum of every asset (bounds were checked in step 4).
-		for (const AssetEntry& entry : decodedEntries)
+		// 5. Data: checksum of every asset (bounds were checked in step 4). Version 1 stores none.
+		if (hasChecksums)
 		{
-			const std::span<const std::byte> data =
-				archive.subspan(static_cast<std::size_t>(entry.offset), static_cast<std::size_t>(entry.size));
-			if (ComputeCrc32(data) != entry.crc32)
+			for (const AssetEntry& entry : decodedEntries)
 			{
-				return ArchiveError::AssetChecksumMismatch;
+				const std::span<const std::byte> data =
+					archive.subspan(static_cast<std::size_t>(entry.offset), static_cast<std::size_t>(entry.size));
+				if (ComputeCrc32(data) != entry.crc32)
+				{
+					return ArchiveError::AssetChecksumMismatch;
+				}
 			}
 		}
 
@@ -290,6 +302,11 @@ namespace asset
 	bool ArchiveReader::IsOpen() const noexcept
 	{
 		return m_isOpen;
+	}
+
+	bool ArchiveReader::HasChecksums() const noexcept
+	{
+		return m_isOpen && asset::HasChecksums(m_header.version);
 	}
 
 	const ArchiveHeader& ArchiveReader::GetHeader() const noexcept

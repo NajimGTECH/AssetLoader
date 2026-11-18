@@ -31,6 +31,10 @@ namespace asset
 	 *     (OverlappingData).
 	 *  5. Data: the checksum of every asset matches (AssetChecksumMismatch).
 	 *
+	 * Versions: every version from kOldestArchiveVersion to kArchiveVersion is loaded. Version 1
+	 * stores no checksums: its header and entries are migrated with crc32 / directoryCrc set to 0,
+	 * the checksum checks are skipped and HasChecksums() returns false. All other checks still apply.
+	 *
 	 * Every byte of the archive is therefore checked once, when it is opened (the cost is one
 	 * CRC-32 pass over the data, about the same as reading it). After a successful Open, the whole
 	 * archive is known to be intact: looking up an asset is O(log n) and can only fail with
@@ -97,6 +101,14 @@ namespace asset
 
 		/** @brief True if an archive is open. */
 		[[nodiscard]] bool IsOpen() const noexcept;
+
+		/**
+		 * @brief True if the open archive stores checksums and they were all verified (version 2+).
+		 *
+		 * False for a version-1 archive: its structure was checked, but corrupted bytes cannot be
+		 * detected. Re-save it with an ArchiveWriter to upgrade it (see ArchiveWriter::AddAssets).
+		 */
+		[[nodiscard]] bool HasChecksums() const noexcept;
 
 		/** @brief Header of the open archive (default header if none is open). */
 		[[nodiscard]] const ArchiveHeader& GetHeader() const noexcept;

@@ -100,6 +100,7 @@
     <ClCompile Include="Crc32Tests.cpp" />
     <ClCompile Include="IntegrityTests.cpp" />
     <ClCompile Include="RoundTripTests.cpp" />
+    <ClCompile Include="VersioningTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ArchiveTestHelpers.h" />

@@ -144,7 +144,15 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Benchmark.cpp" />
+    <ClCompile Include="Demo.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="MemoryTracker.cpp" />
+    <ClCompile Include="Tools.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Commands.h" />
+    <ClInclude Include="MemoryTracker.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\AssetEngine\AssetEngine.vcxproj">
