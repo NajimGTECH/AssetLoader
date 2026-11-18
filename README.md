@@ -26,7 +26,8 @@ build in either version without retargeting. Language standard: C++20.
 `AssetEngine` is split into layers, each in its own folder under `include/` and `src/`:
 
 1. **ByteAccess**: low-level reading and writing of primitive values (`ByteWriter`, `ByteReader`).
-2. **Archive**: archive header, asset directory, IDs, offsets, checksums. *(to do)*
+2. **Archive**: archive header, asset directory, IDs, types, offsets (`ArchiveWriter`, `ArchiveReader`).
+   Checksums *(to do)*.
 3. **Serialization**: conversion of C++ types to and from bytes, built on ByteAccess. *(to do)*
 
 Users include headers relative to `AssetEngine/include`, e.g. `#include "ByteAccess/ByteWriter.h"`.
@@ -120,12 +121,126 @@ exceptional one. `std::expected` is C++23. `std::optional<T>` cannot tell *why* 
 status return value with `[[nodiscard]]` is explicit, cheap, works without exceptions, and the
 compiler warns when a result is ignored.
 
+## Archive Layer
+
+Namespace `asset`, folder `Archive/`. Stores several assets in one binary file and loads any of
+them by ID. Built on the Byte Access Layer, so every value is little-endian with no padding.
+
+### File layout
+
+| Section    | Offset                   | Size                      |
+|------------|--------------------------|---------------------------|
+| Header     | 0                        | 28 bytes                  |
+| Directory  | `header.directoryOffset` | `assetCount` x 28 bytes   |
+| Asset data | `entry.offset`           | `entry.size`, per asset   |
+
+The writer puts the directory right after the header and the data right after the directory. The
+reader only follows the stored offsets, so it does not depend on that order.
+
+**Header** (28 bytes)
+
+| Offset | Type    | Field             | Value                                   |
+|--------|---------|-------------------|-----------------------------------------|
+| 0      | 4 bytes | `magic`           | `ASET` (`41 53 45 54`)                  |
+| 4      | uint16  | `version`         | `kArchiveVersion` (1)                   |
+| 6      | uint16  | `flags`           | 0 (reserved)                            |
+| 8      | uint32  | `assetCount`      | number of directory entries             |
+| 12     | uint64  | `directoryOffset` | absolute offset of the directory        |
+| 20     | uint64  | `archiveSize`     | total size of the archive, in bytes     |
+
+**Directory entry** (28 bytes, sorted by strictly increasing ID)
+
+| Offset | Type   | Field    | Value                                     |
+|--------|--------|----------|-------------------------------------------|
+| 0      | uint64 | `id`     | `AssetId` (never 0)                       |
+| 8      | uint32 | `type`   | `AssetType`                               |
+| 12     | uint64 | `offset` | absolute offset of the asset data         |
+| 20     | uint64 | `size`   | size of the asset data (may be 0)         |
+
+Sorting the directory by ID lets the reader find an asset with a binary search, in O(log n).
+
+### Asset IDs and types
+
+- `asset::AssetId` is a `uint64`. It can be any non-zero number, or derived from a name with
+  `asset::MakeAssetId("textures/player.png")` (64-bit FNV-1a, `constexpr`, same result on every
+  platform). `0` (`kInvalidAssetId`) is reserved.
+- `asset::AssetType` (`Binary`, `Text`, `Texture`, `Mesh`, `Audio`, `Material`, `Shader`, `Scene`)
+  is stored as a `uint32`. Its numeric values are part of the format and must never change.
+
+### API
+
+```cpp
+#include "Archive/ArchiveWriter.h"
+#include "Archive/ArchiveReader.h"
+
+// Saving several assets
+asset::ArchiveWriter writer;
+if (!writer.AddAsset(asset::MakeAssetId("player.png"), asset::AssetType::Texture, textureBytes)
+    || !writer.AddAsset(asset::MakeAssetId("intro.txt"), asset::AssetType::Text, textBytes))
+{
+    // duplicate ID, ID 0 or invalid type
+}
+if (!writer.SaveToFile("game.asset")) { /* I/O error */ }
+
+// Loading one asset by ID
+asset::ArchiveReader archive;
+if (const asset::ArchiveResult result = archive.OpenFile("game.asset"); !result)
+{
+    std::cerr << asset::ToString(result.GetError()) << '\n';
+}
+
+std::span<const std::byte> texture;   // zero-copy view into the archive
+if (archive.GetAssetData(asset::MakeAssetId("player.png"), texture)) { /* ... */ }
+```
+
+**ArchiveWriter**
+
+| Method | Description |
+|--------|-------------|
+| `AddAsset(id, type, span)` / `AddAsset(id, type, vector&&)` | Adds an asset (copied, or moved without copy). Rejects ID 0, invalid types and duplicate IDs. |
+| `Contains(id)`, `GetAssetCount()`, `Clear()` | Manage the pending assets. |
+| `Build()` | Encodes the whole archive into a `std::vector<std::byte>`. |
+| `SaveToFile(path)` | `Build()` then writes the file (replacing any existing one). |
+
+**ArchiveReader**
+
+| Method | Description |
+|--------|-------------|
+| `Open(span)` | Opens a buffer owned by the caller (no copy, the buffer must outlive the reader). |
+| `Open(vector&&)` | Takes ownership of the bytes (also chosen for a temporary vector, so it cannot dangle). |
+| `OpenFile(path)` | Loads the file into memory, then opens it. |
+| `GetAssetData(id, span&)` | Zero-copy view of an asset's bytes. |
+| `LoadAsset(id, vector&)` | Copies an asset's bytes (when they must outlive the reader). |
+| `FindEntry(id, entry&)`, `Contains(id)` | Look up the directory. |
+| `GetHeader()`, `GetEntries()`, `GetAssetCount()`, `IsOpen()`, `Close()` | State of the open archive. |
+
+### Error handling
+
+Same approach as the Byte Access Layer: every operation returns a `[[nodiscard]]`
+`asset::ArchiveResult` (true = success); `GetError()` gives an `asset::ArchiveError` and
+`asset::ToString(error)` a diagnostic message.
+
+When an archive is opened, the reader checks the magic number, the version, that the directory and
+every asset lie inside the data (overflow-safe checks done in 64 bits, so they also hold on x86),
+and that the IDs are sorted and unique. A damaged archive is rejected with `InvalidMagic`,
+`UnsupportedVersion`, `TruncatedHeader`, `TruncatedDirectory`, `InvalidDirectory` or
+`AssetOutOfBounds`. After a successful open, looking up an asset can only fail with `AssetNotFound`.
+
+Strong guarantee: a failed `AddAsset` leaves the writer unchanged, a failed `Open` keeps the
+previously open archive, and lookups never modify their output argument on failure.
+
 ## Tests
 
 `UnitTests` covers the Byte Access Layer: exact little-endian encoding of each type, round-trips
 (including limits, `-0.0`, infinities, NaN payloads), boolean validation, empty buffers, reading
 past the end (no side effects), overflow-safe bounds checks, raw bytes, zero-copy views, position
 tracking and consecutive writes/reads.
+
+It also covers the Archive Layer: exact bytes of the header and of a directory entry, FNV-1a
+reference values, metadata checks of the writer (ID 0, invalid type, duplicates), sorted and
+contiguous layout, saving and loading files, loading 500 assets by ID, and rejection of damaged
+archives (truncation at every possible length, bad magic or version, unsorted or duplicated IDs,
+out-of-bounds or overflowing offsets and sizes).
 
 - **Visual Studio**: *Test > Run All Tests* (Test Explorer).
 - **Command line**, after building:

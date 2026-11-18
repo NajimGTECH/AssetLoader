@@ -92,6 +92,9 @@
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="ArchiveFormatTests.cpp" />
+    <ClCompile Include="ArchiveReaderTests.cpp" />
+    <ClCompile Include="ArchiveWriterTests.cpp" />
     <ClCompile Include="ByteReaderTests.cpp" />
     <ClCompile Include="ByteWriterTests.cpp" />
     <ClCompile Include="RoundTripTests.cpp" />

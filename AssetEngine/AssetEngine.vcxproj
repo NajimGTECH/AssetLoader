@@ -70,12 +70,22 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="include\Archive\ArchiveFormat.h" />
+    <ClInclude Include="include\Archive\ArchiveReader.h" />
+    <ClInclude Include="include\Archive\ArchiveResult.h" />
+    <ClInclude Include="include\Archive\ArchiveWriter.h" />
+    <ClInclude Include="include\Archive\AssetId.h" />
     <ClInclude Include="include\ByteAccess\ByteReader.h" />
     <ClInclude Include="include\ByteAccess\ByteWriter.h" />
     <ClInclude Include="include\ByteAccess\ReadResult.h" />
+    <ClInclude Include="src\Archive\FileIO.h" />
     <ClInclude Include="src\ByteAccess\LittleEndian.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\Archive\ArchiveFormat.cpp" />
+    <ClCompile Include="src\Archive\ArchiveReader.cpp" />
+    <ClCompile Include="src\Archive\ArchiveWriter.cpp" />
+    <ClCompile Include="src\Archive\FileIO.cpp" />
     <ClCompile Include="src\ByteAccess\ByteReader.cpp" />
     <ClCompile Include="src\ByteAccess\ByteWriter.cpp" />
   </ItemGroup>
