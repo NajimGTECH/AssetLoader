@@ -1,12 +1,13 @@
 
 #include <cstdint>
 #include <iostream>
-#include <vector>
 
 #include "ByteAccess/ByteReader.h"
 #include "ByteAccess/ByteWriter.h"
 #include "ByteAccess/ReadResult.h"
-
+#include "Serialization/Deserializer.h"
+#include "Serialization/SerializationTraits.h"
+#include "Serialization/Serializer.h"
 
 // Runs all serialization tests.
 bool RunSerializationTests()
@@ -15,13 +16,13 @@ bool RunSerializationTests()
 
     // Test 1: Unsigned integer serialization.
     {
-        Serializer serializer;
+        asset::Serializer serializer;
         serializer.Write(std::uint32_t{ 42 });
 
-        Deserializer deserializer(serializer.GetBuffer());
+        asset::Deserializer deserializer(serializer.GetBuffer());
 
         std::uint32_t value = 0;
-        const ReadResult result = deserializer.Read(value);
+        const asset::ReadResult result = deserializer.Read(value);
 
         const bool testPassed = result && value == 42;
 
@@ -34,13 +35,13 @@ bool RunSerializationTests()
 
     // Test 2: Signed integer serialization.
     {
-        Serializer serializer;
+        asset::Serializer serializer;
         serializer.Write(std::int32_t{ -123 });
 
-        Deserializer deserializer(serializer.GetBuffer());
+        asset::Deserializer deserializer(serializer.GetBuffer());
 
         std::int32_t value = 0;
-        const ReadResult result = deserializer.Read(value);
+        const asset::ReadResult result = deserializer.Read(value);
 
         const bool testPassed = result && value == -123;
 
@@ -53,13 +54,13 @@ bool RunSerializationTests()
 
     // Test 3: Float serialization.
     {
-        Serializer serializer;
+        asset::Serializer serializer;
         serializer.Write(3.14f);
 
-        Deserializer deserializer(serializer.GetBuffer());
+        asset::Deserializer deserializer(serializer.GetBuffer());
 
         float value = 0.0f;
-        const ReadResult result = deserializer.Read(value);
+        const asset::ReadResult result = deserializer.Read(value);
 
         const bool testPassed = result && value == 3.14f;
 
@@ -72,13 +73,13 @@ bool RunSerializationTests()
 
     // Test 4: Boolean serialization.
     {
-        Serializer serializer;
+        asset::Serializer serializer;
         serializer.Write(true);
 
-        Deserializer deserializer(serializer.GetBuffer());
+        asset::Deserializer deserializer(serializer.GetBuffer());
 
         bool value = false;
-        const ReadResult result = deserializer.Read(value);
+        const asset::ReadResult result = deserializer.Read(value);
 
         const bool testPassed = result && value;
 
@@ -91,22 +92,25 @@ bool RunSerializationTests()
 
     // Test 5: Multiple values in sequence.
     {
-        Serializer serializer;
+        asset::Serializer serializer;
 
         serializer.Write(std::uint8_t{ 10 });
         serializer.Write(std::uint32_t{ 250 });
         serializer.Write(false);
 
-        Deserializer deserializer(serializer.GetBuffer());
+        asset::Deserializer deserializer(serializer.GetBuffer());
 
         std::uint8_t byteValue = 0;
         std::uint32_t integerValue = 0;
         bool boolValue = true;
+        const asset::ReadResult byteResult = deserializer.Read(byteValue);
+        const asset::ReadResult integerResult = deserializer.Read(integerValue);
+        const asset::ReadResult boolResult = deserializer.Read(boolValue);
 
         const bool readSucceeded =
-            deserializer.Read(byteValue) &&
-            deserializer.Read(integerValue) &&
-            deserializer.Read(boolValue);
+            byteResult &&
+            integerResult &&
+            boolResult;
 
         const bool testPassed =
             readSucceeded &&
@@ -124,18 +128,20 @@ bool RunSerializationTests()
 
     // Test 6: Reading beyond the end of the buffer.
     {
-        Serializer serializer;
+        asset::Serializer serializer;
         serializer.Write(std::uint8_t{ 42 });
 
-        Deserializer deserializer(serializer.GetBuffer());
+        asset::Deserializer deserializer(serializer.GetBuffer());
 
         std::uint8_t firstValue = 0;
         std::uint32_t secondValue = 0;
 
-        const bool firstReadSucceeded =
+        const asset::ReadResult firstResult =
             deserializer.Read(firstValue);
 
-        const ReadResult secondResult =
+        const bool firstReadSucceeded = static_cast<bool>(firstResult);
+
+        const asset::ReadResult secondResult =
             deserializer.Read(secondValue);
 
         const bool testPassed =
