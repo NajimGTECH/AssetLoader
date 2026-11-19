@@ -13,7 +13,7 @@
     <Filter Include="src\ByteAccess">
       <UniqueIdentifier>{4d6e8f1a-2b3c-4d5e-9f7a-6b8c1d2e3f4a}</UniqueIdentifier>
     </Filter>
-    <Filter Include="include\Serialisation">
+    <Filter Include="include\Serialization">
       <UniqueIdentifier>{d1f260d0-a934-4d8e-b465-5ee74af08edd}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
@@ -30,14 +30,14 @@
     <ClInclude Include="src\ByteAccess\LittleEndian.h">
       <Filter>src\ByteAccess</Filter>
     </ClInclude>
-    <ClInclude Include="Deserializer.h">
-      <Filter>include\Serialisation</Filter>
+    <ClInclude Include="include\Serialization\Deserializer.h">
+      <Filter>include\Serialization</Filter>
     </ClInclude>
-    <ClInclude Include="SerializationTraits.h">
-      <Filter>include\Serialisation</Filter>
+    <ClInclude Include="include\Serialization\SerializationTraits.h">
+      <Filter>include\Serialization</Filter>
     </ClInclude>
-    <ClInclude Include="Serializer.h">
-      <Filter>include\Serialisation</Filter>
+    <ClInclude Include="include\Serialization\Serializer.h">
+      <Filter>include\Serialization</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -48,7 +48,7 @@
       <Filter>src\ByteAccess</Filter>
     </ClCompile>
     <ClCompile Include="SerializationTests.cpp">
-      <Filter>include\Serialisation</Filter>
+      <Filter>include\Serialization</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

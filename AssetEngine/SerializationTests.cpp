@@ -3,9 +3,9 @@
 #include <iostream>
 #include <vector>
 
-#include "include/ByteAccess/ByteReader.h"
-#include "include/ByteAccess/ByteWriter.h"
-#include "include/ByteAccess/ReadResult.h"
+#include "ByteAccess/ByteReader.h"
+#include "ByteAccess/ByteWriter.h"
+#include "ByteAccess/ReadResult.h"
 
 
 // Runs all serialization tests.

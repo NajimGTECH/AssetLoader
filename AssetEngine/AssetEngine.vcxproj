@@ -70,12 +70,12 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="Deserializer.h" />
+    <ClInclude Include="include\Serialization\Deserializer.h" />
     <ClInclude Include="include\ByteAccess\ByteReader.h" />
     <ClInclude Include="include\ByteAccess\ByteWriter.h" />
     <ClInclude Include="include\ByteAccess\ReadResult.h" />
-    <ClInclude Include="SerializationTraits.h" />
-    <ClInclude Include="Serializer.h" />
+    <ClInclude Include="include\Serialization\SerializationTraits.h" />
+    <ClInclude Include="include\Serialization\Serializer.h" />
     <ClInclude Include="src\ByteAccess\LittleEndian.h" />
   </ItemGroup>
   <ItemGroup>
