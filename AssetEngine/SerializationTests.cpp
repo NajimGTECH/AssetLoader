@@ -6,9 +6,6 @@
 #include "include/ByteAccess/ByteReader.h"
 #include "include/ByteAccess/ByteWriter.h"
 #include "include/ByteAccess/ReadResult.h"
-#include "Deserializer.h"
-#include "Serializer.h"
-#include "SerializationTraits.h"
 
 
 // Runs all serialization tests.
