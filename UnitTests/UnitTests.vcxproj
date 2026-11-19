@@ -95,6 +95,7 @@
     <ClCompile Include="ByteReaderTests.cpp" />
     <ClCompile Include="ByteWriterTests.cpp" />
     <ClCompile Include="RoundTripTests.cpp" />
+    <ClCompile Include="SerializationTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />

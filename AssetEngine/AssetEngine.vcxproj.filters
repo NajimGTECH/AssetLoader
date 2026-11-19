@@ -47,8 +47,5 @@
     <ClCompile Include="src\ByteAccess\ByteWriter.cpp">
       <Filter>src\ByteAccess</Filter>
     </ClCompile>
-    <ClCompile Include="SerializationTests.cpp">
-      <Filter>include\Serialization</Filter>
-    </ClCompile>
   </ItemGroup>
 </Project>
