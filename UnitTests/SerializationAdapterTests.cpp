@@ -1,9 +1,9 @@
 #include "pch.h"
 #include "TestHelpers.h"
 
-#include "Deserializer.h"
-#include "Serializer.h"
-#include "SerializationAdapter.h"
+#include "Serialization/Deserializer.h"
+#include "Serialization/Serializer.h"
+#include "Serialization/SerializationAdapter.h"
 #include "Types/RigidBodyDesc.h"
 #include "Types/Vector3.h"
 

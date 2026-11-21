@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include "../SerializationAdapter.h"
+#include "Serialization/SerializationAdapter.h"
 
 /*
 * Demonstration type #1: a plain composite structure.

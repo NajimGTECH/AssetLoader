@@ -8,7 +8,7 @@
 #include <type_traits>
 #include <utility>
 
-#include "SerializationTraits.h"
+#include "Serialization/SerializationTraits.h"
 
 /*
 * Adapter system of the serialization layer.

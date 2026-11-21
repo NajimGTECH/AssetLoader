@@ -13,10 +13,10 @@
     <Filter Include="src\ByteAccess">
       <UniqueIdentifier>{4d6e8f1a-2b3c-4d5e-9f7a-6b8c1d2e3f4a}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Serialization">
-      <UniqueIdentifier>{b2d4f6a8-1c3e-4a5b-8d7f-9e1a2b3c4d5e}</UniqueIdentifier>
+    <Filter Include="include\Serialization">
+      <UniqueIdentifier>{d1f260d0-a934-4d8e-b465-5ee74af08edd}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Serialization\Types">
+    <Filter Include="include\Types">
       <UniqueIdentifier>{c3e5a7b9-2d4f-4b6c-9e8a-1f2b3c4d5e6f}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
@@ -33,26 +33,26 @@
     <ClInclude Include="src\ByteAccess\LittleEndian.h">
       <Filter>src\ByteAccess</Filter>
     </ClInclude>
-    <ClInclude Include="Serializer.h">
-      <Filter>Serialization</Filter>
+    <ClInclude Include="include\Serialization\Deserializer.h">
+      <Filter>include\Serialization</Filter>
     </ClInclude>
-    <ClInclude Include="Deserializer.h">
-      <Filter>Serialization</Filter>
+    <ClInclude Include="include\Serialization\SerializationTraits.h">
+      <Filter>include\Serialization</Filter>
     </ClInclude>
-    <ClInclude Include="SerializationTraits.h">
-      <Filter>Serialization</Filter>
+    <ClInclude Include="include\Serialization\Serializer.h">
+      <Filter>include\Serialization</Filter>
     </ClInclude>
-    <ClInclude Include="SerializationAdapter.h">
-      <Filter>Serialization</Filter>
+    <ClInclude Include="include\Serialization\SerializationAdapter.h">
+      <Filter>include\Serialization</Filter>
     </ClInclude>
-    <ClInclude Include="Versioning.h">
-      <Filter>Serialization</Filter>
+    <ClInclude Include="include\Serialization\Versioning.h">
+      <Filter>include\Serialization</Filter>
     </ClInclude>
-    <ClInclude Include="Types\Vector3.h">
-      <Filter>Serialization\Types</Filter>
+    <ClInclude Include="include\Types\Vector3.h">
+      <Filter>include\Types</Filter>
     </ClInclude>
-    <ClInclude Include="Types\RigidBodyDesc.h">
-      <Filter>Serialization\Types</Filter>
+    <ClInclude Include="include\Types\RigidBodyDesc.h">
+      <Filter>include\Types</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -62,8 +62,5 @@
     <ClCompile Include="src\ByteAccess\ByteWriter.cpp">
       <Filter>src\ByteAccess</Filter>
     </ClCompile>
-    <ClCompile Include="SerializationTests.cpp">
-      <Filter>Serialization</Filter>
-    </ClCompile>
   </ItemGroup>
-</Project>
+</Project>

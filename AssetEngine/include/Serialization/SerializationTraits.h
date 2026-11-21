@@ -3,8 +3,8 @@
 
 #include <concepts>
 #include <cstdint>
-#include "include/ByteAccess/ByteReader.h"
-#include "include/ByteAccess/ByteWriter.h"
+#include "ByteAccess/ByteReader.h"
+#include "ByteAccess/ByteWriter.h"
 
 namespace asset
 {

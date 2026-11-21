@@ -29,7 +29,7 @@ build in either version without retargeting. Language standard: C++20.
 2. **Archive**: archive header, asset directory, IDs, offsets, checksums. *(to do)*
 3. **Serialization**: conversion of C++ types to and from bytes, built on ByteAccess
    (`Serializer.h`, `Deserializer.h`, `SerializationTraits.h`, `SerializationAdapter.h`,
-   `Versioning.h`; demonstration types in `Types/`).
+   `Versioning.h`). Demonstration types adapted to it live in `include/Types/`.
 
 Users include headers relative to `AssetEngine/include`, e.g. `#include "ByteAccess/ByteWriter.h"`.
 
@@ -127,8 +127,8 @@ compiler warns when a result is ignored.
 ### Core vs. specific types
 
 The core (`Serializer`, `Deserializer`, `SerializationTraits.h` for primitives,
-`SerializationAdapter.h`, `Versioning.h`) never includes a game or engine type. Each specific type
-lives in its own header (see `Types/`) together with its adapter, i.e. a specialization of
+`SerializationAdapter.h`, `Versioning.h`, all in `include/Serialization/`) never includes a game or
+engine type. Each specific type lives in its own header (see `include/Types/`) together with its adapter, i.e. a specialization of
 `asset::SerializationTraits<T>`. Adding a type never requires modifying the core.
 
 The `asset::Serializable<T>` concept checks that a type has an adapter. `Serializer::Write` and
@@ -144,7 +144,7 @@ The `asset::Serializable<T>` concept checks that a type has an adapter. `Seriali
 | hand-written traits | Any custom encoding | Provide `Serialize` / `Deserialize` yourself |
 
 ```cpp
-// Types/Vector3.h
+// include/Types/Vector3.h
 namespace asset
 {
     template<>
@@ -162,7 +162,7 @@ position goes back to where it was.
 ### Versioning
 
 ```cpp
-// Types/RigidBodyDesc.h
+// include/Types/RigidBodyDesc.h
 template<>
 struct SerializationTraits<demo::RigidBodyDesc> : VersionedStructAdapter<demo::RigidBodyDesc>
 {
@@ -201,6 +201,7 @@ conversion logic in `Migrate()`.
 past the end (no side effects), overflow-safe bounds checks, raw bytes, zero-copy views, position
 tracking and consecutive writes/reads.
 
+`SerializationTests` covers the Serializer / Deserializer.
 `SerializationAdapterTests` and `VersioningTests` cover the adapters (structures, enums, a
 hand-written adapter defined in the tests), the V1 -> V2 migration, default values and the
 rejection of unsupported versions.

@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "SerializationAdapter.h"
+#include "Serialization/SerializationAdapter.h"
 
 /*
 * Schema versioning.

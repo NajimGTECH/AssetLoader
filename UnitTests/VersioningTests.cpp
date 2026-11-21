@@ -1,11 +1,11 @@
 #include "pch.h"
 #include "TestHelpers.h"
 
-#include "Deserializer.h"
-#include "Serializer.h"
+#include "Serialization/Deserializer.h"
+#include "Serialization/Serializer.h"
 #include "Types/RigidBodyDesc.h"
 #include "Types/Vector3.h"
-#include "Versioning.h"
+#include "Serialization/Versioning.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 using namespace asset;

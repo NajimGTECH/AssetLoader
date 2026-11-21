@@ -3,9 +3,9 @@
 
 #include <cstdint>
 
-#include "../SerializationAdapter.h"
-#include "../Versioning.h"
-#include "Vector3.h"
+#include "Serialization/SerializationAdapter.h"
+#include "Serialization/Versioning.h"
+#include "Types/Vector3.h"
 
 /*
 * Demonstration type #2: a versioned structure that nests another structure and an enum.

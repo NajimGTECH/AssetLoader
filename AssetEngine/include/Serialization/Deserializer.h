@@ -5,8 +5,8 @@
 #include <span>
 #include <vector>
 
-#include "include/ByteAccess/ByteReader.h"
-#include "SerializationTraits.h"
+#include "ByteAccess/ByteReader.h"
+#include "Serialization/SerializationTraits.h"
 
 namespace asset
 {
