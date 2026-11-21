@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include <concepts>
 #include <cstdint>
 #include "include/ByteAccess/ByteReader.h"
 #include "include/ByteAccess/ByteWriter.h"
@@ -10,9 +11,30 @@ namespace asset
     /*
     * Serialization traits
     * Each supported type defines how it is written and read.
+    *
+    * This is the extension point of the serialization system: to support a new type, specialize
+    * SerializationTraits<T> (by hand, or by deriving from one of the adapters of
+    * SerializationAdapter.h / Versioning.h). The core never needs to be modified.
+    *
+    * The primary template is intentionally empty: a type without a specialization has no
+    * Serialize / Deserialize, so it does not satisfy the Serializable concept below.
     */
     template<typename T>
-    struct SerializationTraits;
+    struct SerializationTraits
+    {
+    };
+
+    /*
+    * A type is serializable when its SerializationTraits provide:
+    *   static void       Serialize(ByteWriter&, const T&);
+    *   static ReadResult Deserialize(ByteReader&, T&);
+    */
+    template<typename T>
+    concept Serializable = requires(ByteWriter & writer, ByteReader & reader, const T & constValue, T & value)
+    {
+        { SerializationTraits<T>::Serialize(writer, constValue) } -> std::same_as<void>;
+        { SerializationTraits<T>::Deserialize(reader, value) } -> std::same_as<ReadResult>;
+    };
 
     // Unsigned integers
     template<>

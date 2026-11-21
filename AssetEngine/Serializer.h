@@ -26,6 +26,10 @@ namespace asset
         template<typename T>
         void Write(const T& value)
         {
+            static_assert(Serializable<T>,
+                "asset::Serializer::Write: this type has no SerializationTraits specialization. "
+                "Specialize asset::SerializationTraits<T> (see SerializationAdapter.h).");
+
             SerializationTraits<T>::Serialize(m_writer, value);
         }
 

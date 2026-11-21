@@ -5,7 +5,7 @@
 #include <span>
 #include <vector>
 
-#include "include/ByteAccess/ByteWriter.h"
+#include "include/ByteAccess/ByteReader.h"
 #include "SerializationTraits.h"
 
 namespace asset
@@ -26,6 +26,10 @@ namespace asset
         template<typename T>
         [[nodiscard]] ReadResult Read(T& value)
         {
+            static_assert(Serializable<T>,
+                "asset::Deserializer::Read: this type has no SerializationTraits specialization. "
+                "Specialize asset::SerializationTraits<T> (see SerializationAdapter.h).");
+
             const std::size_t initialPosition = m_reader.GetPosition();
 
             const ReadResult result =

@@ -10,6 +10,8 @@
 #include "Serializer.h"
 #include "SerializationTraits.h"
 
+using namespace asset;
+
 
 // Runs all serialization tests.
 bool RunSerializationTests()
@@ -136,7 +138,7 @@ bool RunSerializationTests()
         std::uint32_t secondValue = 0;
 
         const bool firstReadSucceeded =
-            deserializer.Read(firstValue);
+            static_cast<bool>(deserializer.Read(firstValue));
 
         const ReadResult secondResult =
             deserializer.Read(secondValue);

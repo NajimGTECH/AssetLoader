@@ -74,9 +74,13 @@
     <ClInclude Include="include\ByteAccess\ByteReader.h" />
     <ClInclude Include="include\ByteAccess\ByteWriter.h" />
     <ClInclude Include="include\ByteAccess\ReadResult.h" />
+    <ClInclude Include="SerializationAdapter.h" />
     <ClInclude Include="SerializationTraits.h" />
     <ClInclude Include="Serializer.h" />
     <ClInclude Include="src\ByteAccess\LittleEndian.h" />
+    <ClInclude Include="Types\RigidBodyDesc.h" />
+    <ClInclude Include="Types\Vector3.h" />
+    <ClInclude Include="Versioning.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="SerializationTests.cpp" />
@@ -86,4 +90,4 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
-</Project>
+</Project>

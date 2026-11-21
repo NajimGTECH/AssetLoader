@@ -65,7 +65,7 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseFullPaths>true</UseFullPaths>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\AssetEngine\include;$(VCInstallDir)Auxiliary\VS\UnitTest\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\AssetEngine\include;$(ProjectDir)..\AssetEngine;$(VCInstallDir)Auxiliary\VS\UnitTest\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -95,6 +95,8 @@
     <ClCompile Include="ByteReaderTests.cpp" />
     <ClCompile Include="ByteWriterTests.cpp" />
     <ClCompile Include="RoundTripTests.cpp" />
+    <ClCompile Include="SerializationAdapterTests.cpp" />
+    <ClCompile Include="VersioningTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />

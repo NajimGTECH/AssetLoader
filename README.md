@@ -27,7 +27,9 @@ build in either version without retargeting. Language standard: C++20.
 
 1. **ByteAccess**: low-level reading and writing of primitive values (`ByteWriter`, `ByteReader`).
 2. **Archive**: archive header, asset directory, IDs, offsets, checksums. *(to do)*
-3. **Serialization**: conversion of C++ types to and from bytes, built on ByteAccess. *(to do)*
+3. **Serialization**: conversion of C++ types to and from bytes, built on ByteAccess
+   (`Serializer.h`, `Deserializer.h`, `SerializationTraits.h`, `SerializationAdapter.h`,
+   `Versioning.h`; demonstration types in `Types/`).
 
 Users include headers relative to `AssetEngine/include`, e.g. `#include "ByteAccess/ByteWriter.h"`.
 
@@ -120,12 +122,88 @@ exceptional one. `std::expected` is C++23. `std::optional<T>` cannot tell *why* 
 status return value with `[[nodiscard]]` is explicit, cheap, works without exceptions, and the
 compiler warns when a result is ignored.
 
+## Serialization: extensibility and versioning
+
+### Core vs. specific types
+
+The core (`Serializer`, `Deserializer`, `SerializationTraits.h` for primitives,
+`SerializationAdapter.h`, `Versioning.h`) never includes a game or engine type. Each specific type
+lives in its own header (see `Types/`) together with its adapter, i.e. a specialization of
+`asset::SerializationTraits<T>`. Adding a type never requires modifying the core.
+
+The `asset::Serializable<T>` concept checks that a type has an adapter. `Serializer::Write` and
+`Deserializer::Read` use it in a `static_assert`, so a missing adapter is a clear compile error.
+
+### Adapters
+
+| Adapter | Use | Encoding |
+|---------|-----|----------|
+| `StructAdapter<T>` | Composite structure | Fields in declaration order, no header |
+| `EnumAdapter<E, Last>` | Enumeration with values `0..Last` | Underlying integer; other values rejected with `ReadError::InvalidValue` |
+| `VersionedStructAdapter<T>` | Structure whose schema evolves | `uint16` schema version, then the fields of that version |
+| hand-written traits | Any custom encoding | Provide `Serialize` / `Deserialize` yourself |
+
+```cpp
+// Types/Vector3.h
+namespace asset
+{
+    template<>
+    struct SerializationTraits<demo::Vector3> : StructAdapter<demo::Vector3>
+    {
+        static constexpr auto Fields = MakeFields(&demo::Vector3::x, &demo::Vector3::y, &demo::Vector3::z);
+    };
+}
+```
+
+Fields can themselves be structures, enums or any type with an adapter. Reading a structure has
+the same strong guarantee as `ByteReader`: on failure, the value is not modified and the read
+position goes back to where it was.
+
+### Versioning
+
+```cpp
+// Types/RigidBodyDesc.h
+template<>
+struct SerializationTraits<demo::RigidBodyDesc> : VersionedStructAdapter<demo::RigidBodyDesc>
+{
+    static constexpr SchemaVersion CurrentVersion = 2;
+    static constexpr SchemaVersion MinSupportedVersion = 1;
+
+    static constexpr auto Fields = MakeFields(
+        &demo::RigidBodyDesc::id, &demo::RigidBodyDesc::mass,
+        &demo::RigidBodyDesc::position, &demo::RigidBodyDesc::velocity,
+        Field(&demo::RigidBodyDesc::type, 2),          // added in V2
+        Field(&demo::RigidBodyDesc::friction, 2),      // added in V2
+        Field(&demo::RigidBodyDesc::restitution, 2));  // added in V2
+
+    // Optional: runs after reading an older version.
+    static void Migrate(demo::RigidBodyDesc& body, SchemaVersion fromVersion) noexcept;
+};
+```
+
+- Writing always uses `CurrentVersion`.
+- Reading a version in `[MinSupportedVersion, CurrentVersion]`: only the fields of that version
+  are read, newer fields keep the default value of the structure (default member initializers),
+  then `Migrate()` converts old data (V1 -> V2: a body with `mass == 0` becomes `BodyType::Static`).
+- Any other version (0, too old, newer than this build) is rejected with
+  `ReadError::UnsupportedVersion`, without modifying the value or moving the read position.
+- Mistakes in a schema (field newer than `CurrentVersion`, version 0, `Field(..., 2)` in a
+  non-versioned `StructAdapter`) are caught at compile time.
+
+Rules to evolve a schema: never remove, reorder or change the type of an existing field; add new
+fields with `Field(&T::member, NewVersion)` and a default value; increment `CurrentVersion`; put
+conversion logic in `Migrate()`.
+
 ## Tests
 
 `UnitTests` covers the Byte Access Layer: exact little-endian encoding of each type, round-trips
 (including limits, `-0.0`, infinities, NaN payloads), boolean validation, empty buffers, reading
 past the end (no side effects), overflow-safe bounds checks, raw bytes, zero-copy views, position
 tracking and consecutive writes/reads.
+
+`SerializationAdapterTests` and `VersioningTests` cover the adapters (structures, enums, a
+hand-written adapter defined in the tests), the V1 -> V2 migration, default values and the
+rejection of unsupported versions.
 
 - **Visual Studio**: *Test > Run All Tests* (Test Explorer).
 - **Command line**, after building:
