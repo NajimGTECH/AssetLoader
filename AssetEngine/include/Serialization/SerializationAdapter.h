@@ -112,6 +112,20 @@ namespace asset
                 }, fields);
         }
 
+        // Minimum encoded size of the fields that exist in `version` (see detail::MinEncodedSize).
+        template<typename Fields>
+        [[nodiscard]] constexpr std::size_t FieldsMinEncodedSize(const Fields& fields, SchemaVersion version) noexcept
+        {
+            return std::apply([version](const auto&... field)
+                {
+                    std::size_t total = 0;
+                    ((total += field.sinceVersion <= version
+                        ? MinEncodedSize<typename std::remove_cvref_t<decltype(field)>::MemberType>()
+                        : 0), ...);
+                    return total;
+                }, fields);
+        }
+
         template<typename Class, typename Member>
         void WriteField(ByteWriter& writer, const Class& value, const FieldDescriptor<Class, Member>& field, SchemaVersion version)
         {
@@ -211,6 +225,11 @@ namespace asset
                 });
         }
 
+        [[nodiscard]] static constexpr std::size_t MinEncodedSize() noexcept
+        {
+            return detail::FieldsMinEncodedSize(SerializationTraits<T>::Fields, 1);
+        }
+
     private:
         static constexpr void CheckFields() noexcept
         {
@@ -264,6 +283,11 @@ namespace asset
 
             value = static_cast<E>(raw);
             return ReadError::None;
+        }
+
+        [[nodiscard]] static constexpr std::size_t MinEncodedSize() noexcept
+        {
+            return sizeof(Underlying);
         }
 
         [[nodiscard]] static constexpr bool IsValid(Underlying raw) noexcept

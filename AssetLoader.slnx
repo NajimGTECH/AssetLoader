@@ -5,5 +5,7 @@
   </Configurations>
   <Project Path="AssetEngine/AssetEngine.vcxproj" Id="3f6a2c1e-8b4d-4e7a-9c25-7d1e0b6a4f31" />
   <Project Path="AssetLoader/AssetLoader.vcxproj" Id="ffa5bc6b-159c-44e6-aefe-610e4f1c207d" />
+  <Project Path="PhysicsAdapter/PhysicsAdapter.vcxproj" Id="9c4a6e2f-1b3d-4f75-8a9c-0e2d4b6f8a13" />
+  <Project Path="PhysicsEngine/PhysicsEngine.vcxproj" Id="5b2e8d1c-7a4f-4c93-b6e0-9d1f3a5c7e24" />
   <Project Path="UnitTests/UnitTests.vcxproj" Id="a7c94e12-5d3b-4f86-b1e0-2c8f6d493a75" />
 </Solution>

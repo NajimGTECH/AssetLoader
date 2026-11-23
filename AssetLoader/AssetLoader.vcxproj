@@ -72,7 +72,7 @@
   <PropertyGroup Label="UserMacros" />
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\AssetEngine\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\AssetEngine\include;$(ProjectDir)..\PhysicsEngine\include;$(ProjectDir)..\PhysicsAdapter\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -148,6 +148,7 @@
     <ClCompile Include="Demo.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="MemoryTracker.cpp" />
+    <ClCompile Include="SceneDemo.cpp" />
     <ClCompile Include="Tools.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -157,6 +158,12 @@
   <ItemGroup>
     <ProjectReference Include="..\AssetEngine\AssetEngine.vcxproj">
       <Project>{3f6a2c1e-8b4d-4e7a-9c25-7d1e0b6a4f31}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\PhysicsEngine\PhysicsEngine.vcxproj">
+      <Project>{5b2e8d1c-7a4f-4c93-b6e0-9d1f3a5c7e24}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\PhysicsAdapter\PhysicsAdapter.vcxproj">
+      <Project>{9c4a6e2f-1b3d-4f75-8a9c-0e2d4b6f8a13}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

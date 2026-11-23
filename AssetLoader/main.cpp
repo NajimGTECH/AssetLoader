@@ -4,8 +4,10 @@
  *
  *   AssetLoader.exe                       walk-through demo (archive in the temporary folder)
  *   AssetLoader.exe demo [archive]        same, with the archive written to `archive`
- *   AssetLoader.exe samples <directory>   writes sample_v1.aset and sample_v2.aset
+ *   AssetLoader.exe scene [archive]       physics + general-purpose walk-through
+ *   AssetLoader.exe samples <directory>   writes the sample archives (both versions)
  *   AssetLoader.exe inspect <archive>     prints the header and directory of an archive
+ *   AssetLoader.exe restore <archive>     decodes every typed asset (scenes restored into a world)
  *   AssetLoader.exe migrate <in> <out>    converts an archive to the current format version
  *   AssetLoader.exe bench                 measures sizes, times and temporary memory
  */
@@ -24,8 +26,10 @@ namespace
 			"Usage:\n"
 			"  AssetLoader.exe                       walk-through demo (archive in the temporary folder)\n"
 			"  AssetLoader.exe demo [archive]        same, with the archive written to <archive>\n"
-			"  AssetLoader.exe samples <directory>   writes sample_v1.aset and sample_v2.aset\n"
+			"  AssetLoader.exe scene [archive]       physics + general-purpose walk-through\n"
+			"  AssetLoader.exe samples <directory>   writes the sample archives (both versions)\n"
 			"  AssetLoader.exe inspect <archive>     prints the header and directory of an archive\n"
+			"  AssetLoader.exe restore <archive>     decodes every typed asset (scenes restored into a world)\n"
 			"  AssetLoader.exe migrate <in> <out>    converts an archive to the current format version\n"
 			"  AssetLoader.exe bench                 measures sizes, times and temporary memory\n";
 		return 1;
@@ -46,6 +50,16 @@ int main(int argc, char* argv[])
 	if (command == "demo" && args.size() <= 2)
 	{
 		return app::RunDemo(args.size() == 2 ? std::filesystem::path(args[1]) : defaultArchive);
+	}
+	if (command == "scene" && args.size() <= 2)
+	{
+		return app::RunSceneDemo(args.size() == 2
+			? std::filesystem::path(args[1])
+			: std::filesystem::temp_directory_path() / "AssetLoaderScene.aset");
+	}
+	if (command == "restore" && args.size() == 2)
+	{
+		return app::RunRestore(args[1]);
 	}
 	if (command == "samples" && args.size() == 2)
 	{

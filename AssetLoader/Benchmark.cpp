@@ -25,8 +25,13 @@
 
 #include "Archive/ArchiveReader.h"
 #include "Archive/ArchiveWriter.h"
+#include "Assets/TypedAsset.h"
 #include "Commands.h"
 #include "MemoryTracker.h"
+#include "Physics/World.h"
+#include "PhysicsIO/ExampleScene.h"
+#include "PhysicsIO/SceneAdapter.h"
+#include "PhysicsIO/SceneSerialization.h"
 
 namespace app
 {
@@ -233,6 +238,82 @@ namespace app
 				return total;
 			}));
 		}
+
+		/** Physics scenes: a grid of `bodyCount` boxes (plus ground) with joints, built deterministically. */
+		void RunSceneVolume(const char* name, std::uint32_t bodyCount, const std::filesystem::path& path)
+		{
+			const asset::AssetId sceneId = asset::MakeAssetId("bench/scene");
+
+			physics::World world;
+			physics_io::BuildGridWorld(world, bodyCount);
+			for (int i = 0; i < 10; ++i)
+			{
+				world.Step(); // a snapshot of a running simulation, not the authored state
+			}
+
+			const physics_io::SceneRecord record = physics_io::CaptureScene(world, "bench");
+			const std::vector<std::byte> payload = asset::EncodeTypedAsset(record);
+
+			asset::ArchiveWriter writer;
+			Check(physics_io::SaveWorld(writer, sceneId, world, "bench"));
+			Check(writer.SaveToFile(path));
+			asset::ArchiveReader openReader;
+			Check(openReader.OpenFile(path));
+
+			std::cout << std::format("\n### Physics scene {}: {} bodies, {} colliders, {} joints\n\n", name,
+				world.GetBodies().size(), world.GetColliderCount(), world.GetJoints().size());
+			std::cout << std::format("Scene payload: {} bytes ({}), {:.1f} bytes per body. Archive file: {} bytes.\n\n",
+				payload.size(), FormatBytes(static_cast<double>(payload.size())),
+				static_cast<double>(payload.size()) / static_cast<double>(world.GetBodies().size()),
+				openReader.GetHeader().archiveSize);
+
+			PrintTableHeader();
+
+			PrintRow("Capture the world (World -> record)", Measure([&]() { return physics_io::CaptureScene(world, "bench"); }));
+
+			PrintRow("Encode the record (record -> bytes)", Measure([&]() { return asset::EncodeTypedAsset(record); }));
+
+			PrintRow("Save to file (capture+encode+write)", Measure([&]()
+			{
+				asset::ArchiveWriter saver;
+				Check(physics_io::SaveWorld(saver, sceneId, world, "bench"));
+				const asset::ArchiveResult result = saver.SaveToFile(path);
+				Check(result);
+				return result;
+			}));
+
+			PrintRow("Decode the scene by ID (bytes -> rec.)", Measure([&]()
+			{
+				physics_io::SceneRecord decoded;
+				if (!asset::LoadTypedAsset(openReader, sceneId, decoded))
+				{
+					g_allOk = false;
+				}
+				return decoded;
+			}));
+
+			PrintRow("Restore (validate + rebuild World)", Measure([&]()
+			{
+				physics::World restored;
+				if (!physics_io::ReplaceWorld(record, restored))
+				{
+					g_allOk = false;
+				}
+				return restored;
+			}));
+
+			PrintRow("Load from file (open+decode+restore)", Measure([&]()
+			{
+				asset::ArchiveReader reader;
+				Check(reader.OpenFile(path));
+				physics::World restored;
+				if (!physics_io::LoadWorld(reader, sceneId, restored).IsOk())
+				{
+					g_allOk = false;
+				}
+				return restored;
+			}));
+		}
 	}
 
 	int RunBenchmark()
@@ -256,6 +337,8 @@ namespace app
 		{
 			RunVolume(volume, path);
 		}
+		RunSceneVolume("Small", 100, path);
+		RunSceneVolume("Large", 10'000, path);
 
 		std::error_code ignored;
 		std::filesystem::remove(path, ignored);

@@ -65,7 +65,7 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseFullPaths>true</UseFullPaths>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\AssetEngine\include;$(VCInstallDir)Auxiliary\VS\UnitTest\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\AssetEngine\include;$(ProjectDir)..\PhysicsEngine\include;$(ProjectDir)..\PhysicsAdapter\include;$(VCInstallDir)Auxiliary\VS\UnitTest\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -97,8 +97,11 @@
     <ClCompile Include="ArchiveWriterTests.cpp" />
     <ClCompile Include="ByteReaderTests.cpp" />
     <ClCompile Include="ByteWriterTests.cpp" />
+    <ClCompile Include="ContainerSerializationTests.cpp" />
     <ClCompile Include="Crc32Tests.cpp" />
+    <ClCompile Include="GeneralPurposeTests.cpp" />
     <ClCompile Include="IntegrityTests.cpp" />
+    <ClCompile Include="PhysicsSceneTests.cpp" />
     <ClCompile Include="RoundTripTests.cpp" />
     <ClCompile Include="SerializationAdapterTests.cpp" />
     <ClCompile Include="SerializationTests.cpp" />
@@ -113,6 +116,12 @@
   <ItemGroup>
     <ProjectReference Include="..\AssetEngine\AssetEngine.vcxproj">
       <Project>{3f6a2c1e-8b4d-4e7a-9c25-7d1e0b6a4f31}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\PhysicsEngine\PhysicsEngine.vcxproj">
+      <Project>{5b2e8d1c-7a4f-4c93-b6e0-9d1f3a5c7e24}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\PhysicsAdapter\PhysicsAdapter.vcxproj">
+      <Project>{9c4a6e2f-1b3d-4f75-8a9c-0e2d4b6f8a13}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

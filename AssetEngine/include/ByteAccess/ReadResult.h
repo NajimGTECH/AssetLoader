@@ -43,6 +43,15 @@ namespace asset
 
 		/** @brief A versioned schema was written with a version this build cannot read. */
 		UnsupportedVersion,
+
+		/** @brief A string is not valid UTF-8 (bad sequence, overlong form, surrogate, > U+10FFFF). */
+		InvalidUtf8,
+
+		/**
+		 * @brief A length prefix (string bytes, sequence count) is larger than the data that is left,
+		 * or than the hard limit of the format. Checked before any allocation.
+		 */
+		LengthTooLarge,
 	};
 
 	/**
@@ -61,6 +70,8 @@ namespace asset
 		case ReadError::InvalidBool: return "invalid boolean value (expected 0 or 1)";
 		case ReadError::InvalidValue: return "decoded value is out of the range allowed by its type";
 		case ReadError::UnsupportedVersion: return "unsupported schema version";
+		case ReadError::InvalidUtf8: return "string is not valid UTF-8";
+		case ReadError::LengthTooLarge: return "length prefix is larger than the remaining data or the format limit";
 		}
 		return "unknown read error";
 	}

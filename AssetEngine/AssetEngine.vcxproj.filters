@@ -19,6 +19,9 @@
     <Filter Include="include\Integrity">
       <UniqueIdentifier>{c3f5a7b9-1d2e-4f60-8a4b-9d7c5e3f1a28}</UniqueIdentifier>
     </Filter>
+    <Filter Include="include\Assets">
+      <UniqueIdentifier>{7a91c2d4-5e6f-4a8b-9c0d-1e2f3a4b5c6d}</UniqueIdentifier>
+    </Filter>
     <Filter Include="src">
       <UniqueIdentifier>{1a3b5c7d-9e2f-4b68-8c1d-3e5f7a9b2c4d}</UniqueIdentifier>
     </Filter>
@@ -74,6 +77,24 @@
     </ClInclude>
     <ClInclude Include="include\Serialization\Versioning.h">
       <Filter>include\Serialization</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Serialization\ContainerTraits.h">
+      <Filter>include\Serialization</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Serialization\Utf8.h">
+      <Filter>include\Serialization</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Assets\AssetTypeInfo.h">
+      <Filter>include\Assets</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Assets\TypedAsset.h">
+      <Filter>include\Assets</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Types\GameSettings.h">
+      <Filter>include\Types</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Types\PlayerProfile.h">
+      <Filter>include\Types</Filter>
     </ClInclude>
     <ClInclude Include="include\Types\RigidBodyDesc.h">
       <Filter>include\Types</Filter>

@@ -34,6 +34,18 @@ namespace app
 	/** @brief Measures archive size, save/load times and temporary memory for two data volumes. */
 	int RunBenchmark();
 
+	/**
+	 * @brief Physics and general-purpose walk-through: saves the example scene, a snapshot, a player
+	 * profile and the game settings, loads them by ID, restores worlds and shows refused scenes.
+	 */
+	int RunSceneDemo(const std::filesystem::path& archivePath);
+
+	/** @brief Writes scene_v1.aset, scene_v2.aset (example scene + snapshot) and general.aset into `directory`. */
+	int RunSceneSamples(const std::filesystem::path& directory);
+
+	/** @brief Decodes every typed asset of an archive: restores scenes into a world, prints profiles and settings. */
+	int RunRestore(const std::filesystem::path& archivePath);
+
 	// --- Helpers shared by the commands ---------------------------------------------------------
 
 	/** @brief The bytes of a string (without terminating zero). */

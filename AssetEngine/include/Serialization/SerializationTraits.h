@@ -2,7 +2,9 @@
 #pragma once
 
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
+#include <type_traits>
 #include "ByteAccess/ByteReader.h"
 #include "ByteAccess/ByteWriter.h"
 
@@ -35,6 +37,36 @@ namespace asset
         { SerializationTraits<T>::Serialize(writer, constValue) } -> std::same_as<void>;
         { SerializationTraits<T>::Deserialize(reader, value) } -> std::same_as<ReadResult>;
     };
+
+    namespace detail
+    {
+        /*
+        * Smallest number of bytes a value of T can occupy once encoded.
+        *
+        * Used by sequence readers to bound an element count against the bytes that are really left
+        * *before* allocating: a corrupted count of 4 billion elements is rejected without reserving
+        * anything. Traits may provide `static constexpr std::size_t MinEncodedSize()`; the adapters
+        * of SerializationAdapter.h / Versioning.h / ContainerTraits.h compute it from their fields.
+        * Arithmetic types use their fixed size. Anything else (hand-written traits that do not
+        * declare it) gets 0, the always-safe value: readers then fall back to the hard limits.
+        */
+        template<typename T>
+        [[nodiscard]] constexpr std::size_t MinEncodedSize() noexcept
+        {
+            if constexpr (requires { { SerializationTraits<T>::MinEncodedSize() } -> std::convertible_to<std::size_t>; })
+            {
+                return SerializationTraits<T>::MinEncodedSize();
+            }
+            else if constexpr (std::is_arithmetic_v<T>)
+            {
+                return sizeof(T);
+            }
+            else
+            {
+                return 0;
+            }
+        }
+    }
 
     // Unsigned integers
     template<>
@@ -194,3 +226,6 @@ namespace asset
         }
     };
 }
+
+// Strings, sequences and fixed-size arrays are part of the core encoding.
+#include "Serialization/ContainerTraits.h"

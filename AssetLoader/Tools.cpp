@@ -125,7 +125,9 @@ namespace app
 			std::cout << "Wrote " << path.string() << '\n';
 			PrintDirectory(reader);
 		}
-		return 0;
+
+		// Physics scenes in both scene versions, and the general-purpose types.
+		return RunSceneSamples(directory);
 	}
 
 	int RunInspect(const std::filesystem::path& archivePath)

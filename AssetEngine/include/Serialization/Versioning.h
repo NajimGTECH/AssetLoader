@@ -93,6 +93,13 @@ namespace asset
             return result;
         }
 
+        // Version prefix + the fields of the oldest supported version (fields are only ever added).
+        [[nodiscard]] static constexpr std::size_t MinEncodedSize() noexcept
+        {
+            return sizeof(SchemaVersion)
+                + detail::FieldsMinEncodedSize(SerializationTraits<T>::Fields, SerializationTraits<T>::MinSupportedVersion);
+        }
+
         // True if this build can read data written with `version`.
         [[nodiscard]] static constexpr bool IsSupported(SchemaVersion version) noexcept
         {
