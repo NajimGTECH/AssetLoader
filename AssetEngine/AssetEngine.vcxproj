@@ -79,6 +79,13 @@
     <ClInclude Include="include\ByteAccess\ByteWriter.h" />
     <ClInclude Include="include\ByteAccess\ReadResult.h" />
     <ClInclude Include="include\Integrity\Crc32.h" />
+    <ClInclude Include="include\Serialization\Deserializer.h" />
+    <ClInclude Include="include\Serialization\SerializationAdapter.h" />
+    <ClInclude Include="include\Serialization\SerializationTraits.h" />
+    <ClInclude Include="include\Serialization\Serializer.h" />
+    <ClInclude Include="include\Serialization\Versioning.h" />
+    <ClInclude Include="include\Types\RigidBodyDesc.h" />
+    <ClInclude Include="include\Types\Vector3.h" />
     <ClInclude Include="src\Archive\FileIO.h" />
     <ClInclude Include="src\ByteAccess\LittleEndian.h" />
   </ItemGroup>

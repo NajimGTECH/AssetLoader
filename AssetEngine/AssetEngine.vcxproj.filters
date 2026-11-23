@@ -10,6 +10,12 @@
     <Filter Include="include\ByteAccess">
       <UniqueIdentifier>{8e2a4c6b-3d9f-4a15-b7c3-5f1d2e8a6b47}</UniqueIdentifier>
     </Filter>
+    <Filter Include="include\Serialization">
+      <UniqueIdentifier>{d1f260d0-a934-4d8e-b465-5ee74af08edd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="include\Types">
+      <UniqueIdentifier>{c3e5a7b9-2d4f-4b6c-9e8a-1f2b3c4d5e6f}</UniqueIdentifier>
+    </Filter>
     <Filter Include="include\Integrity">
       <UniqueIdentifier>{c3f5a7b9-1d2e-4f60-8a4b-9d7c5e3f1a28}</UniqueIdentifier>
     </Filter>
@@ -53,6 +59,27 @@
     </ClInclude>
     <ClInclude Include="include\Integrity\Crc32.h">
       <Filter>include\Integrity</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Serialization\Deserializer.h">
+      <Filter>include\Serialization</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Serialization\SerializationAdapter.h">
+      <Filter>include\Serialization</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Serialization\SerializationTraits.h">
+      <Filter>include\Serialization</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Serialization\Serializer.h">
+      <Filter>include\Serialization</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Serialization\Versioning.h">
+      <Filter>include\Serialization</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Types\RigidBodyDesc.h">
+      <Filter>include\Types</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Types\Vector3.h">
+      <Filter>include\Types</Filter>
     </ClInclude>
     <ClInclude Include="src\Archive\FileIO.h">
       <Filter>src\Archive</Filter>

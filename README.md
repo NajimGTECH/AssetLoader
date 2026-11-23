@@ -28,7 +28,7 @@ checksums, and still reads the previous version of its format.
 | Tests: round-trips, empty archive, access by ID, migration, unknown versions, truncation, altered byte, excessive size, write failure | Done | [Tests](#tests) |
 | Measurements for two data volumes: size, times, temporary memory | Done | [Measurements](#measurements) |
 | Archives for both versions, with commands to reproduce the round-trips | Done | [Sample archives](#sample-archives) |
-| General-purpose serialization (strings, sequences, composite types, adapters) | In progress (Student 2) | branch `feature/Sérialisation` |
+| General-purpose serialization (primitives, composite types, enums, adapters, schema versioning) | Merged into `main` (Student 2); strings and sequences still to do | branch `feature/Sérialisation` |
 | Physics adapter, scene and state restoration | Not in the repository yet | — |
 
 ## Build
@@ -61,8 +61,9 @@ build in either version without retargeting. Language standard: C++20. No extern
 2. **Archive**: archive header, asset directory, IDs, types, offsets (`ArchiveWriter`, `ArchiveReader`).
 3. **Integrity**: CRC-32 checksums (`Crc32`), used by the Archive layer to detect corrupted or
    truncated archives.
-4. **Serialization**: conversion of C++ types to and from bytes, built on ByteAccess. *(in progress
-   on branch `feature/Sérialisation`, not merged yet)*
+4. **Serialization**: conversion of C++ types to and from bytes, built on ByteAccess
+   (`Serializer`, `Deserializer`, `SerializationTraits`, `SerializationAdapter`, `Versioning`, in
+   `include/Serialization/`). Demonstration types adapted to it live in `include/Types/`.
 
 Users include headers relative to `AssetEngine/include`, e.g. `#include "ByteAccess/ByteWriter.h"`.
 
@@ -425,6 +426,78 @@ For a version-1 archive, steps 1 to 4 run without the three checksum checks.
 - Every asset is verified when the archive is opened (one CRC pass over the data, about the cost
   of reading it), so `GetAssetData` never returns corrupted bytes and stays `noexcept`.
 
+## Serialization: extensibility and versioning
+
+### Core vs. specific types
+
+The core (`Serializer`, `Deserializer`, `SerializationTraits.h` for primitives,
+`SerializationAdapter.h`, `Versioning.h`, all in `include/Serialization/`) never includes a game or
+engine type. Each specific type lives in its own header (see `include/Types/`) together with its adapter, i.e. a specialization of
+`asset::SerializationTraits<T>`. Adding a type never requires modifying the core.
+
+The `asset::Serializable<T>` concept checks that a type has an adapter. `Serializer::Write` and
+`Deserializer::Read` use it in a `static_assert`, so a missing adapter is a clear compile error.
+
+### Adapters
+
+| Adapter | Use | Encoding |
+|---------|-----|----------|
+| `StructAdapter<T>` | Composite structure | Fields in declaration order, no header |
+| `EnumAdapter<E, Last>` | Enumeration with values `0..Last` | Underlying integer; other values rejected with `ReadError::InvalidValue` |
+| `VersionedStructAdapter<T>` | Structure whose schema evolves | `uint16` schema version, then the fields of that version |
+| hand-written traits | Any custom encoding | Provide `Serialize` / `Deserialize` yourself |
+
+```cpp
+// include/Types/Vector3.h
+namespace asset
+{
+    template<>
+    struct SerializationTraits<demo::Vector3> : StructAdapter<demo::Vector3>
+    {
+        static constexpr auto Fields = MakeFields(&demo::Vector3::x, &demo::Vector3::y, &demo::Vector3::z);
+    };
+}
+```
+
+Fields can themselves be structures, enums or any type with an adapter. Reading a structure has
+the same strong guarantee as `ByteReader`: on failure, the value is not modified and the read
+position goes back to where it was.
+
+### Versioning
+
+```cpp
+// include/Types/RigidBodyDesc.h
+template<>
+struct SerializationTraits<demo::RigidBodyDesc> : VersionedStructAdapter<demo::RigidBodyDesc>
+{
+    static constexpr SchemaVersion CurrentVersion = 2;
+    static constexpr SchemaVersion MinSupportedVersion = 1;
+
+    static constexpr auto Fields = MakeFields(
+        &demo::RigidBodyDesc::id, &demo::RigidBodyDesc::mass,
+        &demo::RigidBodyDesc::position, &demo::RigidBodyDesc::velocity,
+        Field(&demo::RigidBodyDesc::type, 2),          // added in V2
+        Field(&demo::RigidBodyDesc::friction, 2),      // added in V2
+        Field(&demo::RigidBodyDesc::restitution, 2));  // added in V2
+
+    // Optional: runs after reading an older version.
+    static void Migrate(demo::RigidBodyDesc& body, SchemaVersion fromVersion) noexcept;
+};
+```
+
+- Writing always uses `CurrentVersion`.
+- Reading a version in `[MinSupportedVersion, CurrentVersion]`: only the fields of that version
+  are read, newer fields keep the default value of the structure (default member initializers),
+  then `Migrate()` converts old data (V1 -> V2: a body with `mass == 0` becomes `BodyType::Static`).
+- Any other version (0, too old, newer than this build) is rejected with
+  `ReadError::UnsupportedVersion`, without modifying the value or moving the read position.
+- Mistakes in a schema (field newer than `CurrentVersion`, version 0, `Field(..., 2)` in a
+  non-versioned `StructAdapter`) are caught at compile time.
+
+Rules to evolve a schema: never remove, reorder or change the type of an existing field; add new
+fields with `Field(&T::member, NewVersion)` and a default value; increment `CurrentVersion`; put
+conversion logic in `Migrate()`.
+
 ## Tests
 
 `UnitTests` covers the Byte Access Layer: exact little-endian encoding of each type, round-trips
@@ -449,6 +522,11 @@ to version 1, migration to the current version (in memory and through files, byt
 archive written directly), downgrade then upgrade, all-or-nothing `AddAssets`, and rejection of
 unknown versions (0, 3, 100, 256, 65535) on reading and on writing.
 
+And Serialization: `SerializationTests` covers the `Serializer` / `Deserializer` (round-trips,
+reading past the end), `SerializationAdapterTests` the adapters (structures, enums, a
+hand-written adapter defined in the tests) and `SerializationVersioningTests` the schema versioning
+(V1 -> V2 migration, default values, rejection of unsupported versions).
+
 How the brief's required test cases map to the tests:
 
 | Required case | Tests |
@@ -464,7 +542,8 @@ How the brief's required test cases map to the tests:
 | Write failure | `ArchiveWriterTests::SaveToFileReportsOpenFailure` |
 | Invalid reference | Serialization layer (references between assets are resolved there). |
 
-Result: **148 tests, all passing** on x64 Debug and x86 Release, built with `/W4` without warnings.
+Result for the Archive System: **148 tests, all passing** on x64 Debug and x86 Release, built with
+`/W4` without warnings. The Serialization layer adds 31 tests.
 
 - **Visual Studio**: *Test > Run All Tests* (Test Explorer).
 - **Command line**, after building:
@@ -656,7 +735,7 @@ CRC-32, FNV-1a, validation) is implemented in this repository and can be explain
 | Student | Part | Branches |
 |---------|------|----------|
 | Student 1: Archive System | Byte Access (`ByteWriter`, `ByteReader`, endianness, bounds checks), Archive Format (header, directory, IDs, types, offsets, multi-asset writing, loading by ID), Integrity (CRC-32, metadata validation, truncation and corruption detection), format versioning and migration, demo application, measurements | `feature/byte-access-layer`, `feature/archive-format`, `feature/integrity`, `feature/archive-demo`, `feature/versioning-and-measurements` |
-| Student 2: Serialization | General-purpose serialization built on Byte Access: `SerializationTraits` (one specialisation per type, encoding and decoding), `Serializer` and `Deserializer` | `feature/Sérialisation` (in progress) |
+| Student 2: Serialization | General-purpose serialization built on Byte Access: `SerializationTraits` (one specialisation per type, encoding and decoding), `Serializer` and `Deserializer`, adapter system (`StructAdapter`, `EnumAdapter`), schema versioning and migration (`VersionedStructAdapter`) | `feature/Sérialisation` |
 
 **How the parts fit together**: Serialization turns a C++ object into bytes with `ByteWriter` and
 back with `ByteReader`. The Archive layer stores those bytes as an asset, under a stable `AssetId`,
@@ -665,6 +744,5 @@ how the brief keeps the file format independent of the in-memory types.
 
 **Integration status**: every Archive System branch builds on the previous one, so
 `feature/versioning-and-measurements` contains all of them, and it is merged into `main`.
-`feature/Sérialisation` is not merged yet. It starts from `feature/byte-access-layer`, and its headers are in
-`AssetEngine/` rather than `AssetEngine/include/Serialization/`, so they will need to be moved
-when it is merged.
+`feature/Sérialisation` is merged into `main` too, with its headers in
+`AssetEngine/include/Serialization/` and its demonstration types in `AssetEngine/include/Types/`.

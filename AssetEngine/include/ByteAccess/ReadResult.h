@@ -37,6 +37,12 @@ namespace asset
 
 		/** @brief A boolean byte was neither 0x00 nor 0x01. */
 		InvalidBool,
+
+		/** @brief A decoded value is outside the range allowed by its type (e.g. unknown enum value). */
+		InvalidValue,
+
+		/** @brief A versioned schema was written with a version this build cannot read. */
+		UnsupportedVersion,
 	};
 
 	/**
@@ -53,6 +59,8 @@ namespace asset
 		case ReadError::None:        return "no error";
 		case ReadError::EndOfBuffer: return "attempt to read past the end of the buffer";
 		case ReadError::InvalidBool: return "invalid boolean value (expected 0 or 1)";
+		case ReadError::InvalidValue: return "decoded value is out of the range allowed by its type";
+		case ReadError::UnsupportedVersion: return "unsupported schema version";
 		}
 		return "unknown read error";
 	}
